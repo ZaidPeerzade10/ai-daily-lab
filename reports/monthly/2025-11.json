@@ -1,0 +1,3 @@
+{
+  "2025-11-30": "Given a pandas DataFrame containing at least four numerical features (`feature_A`, `feature_B`, `feature_C`, `feature_D`):\n1.  Create two new interaction features: `interaction_AB` (the product of `feature_A` and `feature_B`) and `interaction_CD` (the product of `feature_C` and `feature_D`).\n2.  Identify all numerical features (original and new) that have a skewness value greater than 0.75.\n3.  For each identified skewed feature, apply a `np.log1p` transformation, replacing the original feature column with its transformed version.\n4.  Display the head of the modified DataFrame and the skewness of all features after transformation."
+}
