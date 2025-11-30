@@ -46,7 +46,8 @@ Respond ONLY in JSON:
 {{ "task":"...", "focus":"...", "dataset":"...", "hint":"..." }}
 """
 
-URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={API_KEY}"
+URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+
 
 res = requests.post(URL, json={"contents":[{"parts":[{"text":PROMPT}]}]})
 res.raise_for_status()
@@ -97,4 +98,4 @@ month[TODAY] = task["task"]
 with open(MONTH_FILE, "w") as f:
     json.dump(month, f, indent=2)
 
-print("✅ AI task generated successfully")
+print("AI task generated successfully")
