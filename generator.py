@@ -63,11 +63,18 @@ response = client.models.generate_content(
 
 raw = response.text.strip()
 
+# Remove Markdown code fences if present
+if raw.startswith("```"):
+    raw = raw.split("```")[1]
+
+raw = raw.replace("json", "").strip()
+
 # Parse JSON safely
 try:
     task = json.loads(raw)
 except Exception:
     raise Exception("Gemini returned invalid JSON:\n" + raw)
+
 
 DAILY = {**task, "date": TODAY, "timestamp": datetime.utcnow().isoformat() + "Z"}
 
