@@ -17,8 +17,9 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Requests
-      run: pip install requests
+    - name: Install Gemini SDK
+      run: pip install google-genai
+
 
     - name: Run Generator
       env:
