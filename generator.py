@@ -11,8 +11,10 @@ MONTH = TODAY[:7]
 
 LOG_DIR = "data/logs"
 MONTHLY_DIR = "reports/monthly"
+OUTPUT_DIR = "output"
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(MONTHLY_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Load history
 stats_file = "output/stats.json"
