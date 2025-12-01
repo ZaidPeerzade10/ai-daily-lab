@@ -1,17 +1,18 @@
-# AI Daily Lab — 2025-11-30
+# AI Daily Lab — 2025-12-01
 
 ## Task
-Given a pandas DataFrame containing at least four numerical features (`feature_A`, `feature_B`, `feature_C`, `feature_D`):
-1.  Create two new interaction features: `interaction_AB` (the product of `feature_A` and `feature_B`) and `interaction_CD` (the product of `feature_C` and `feature_D`).
-2.  Identify all numerical features (original and new) that have a skewness value greater than 0.75.
-3.  For each identified skewed feature, apply a `np.log1p` transformation, replacing the original feature column with its transformed version.
-4.  Display the head of the modified DataFrame and the skewness of all features after transformation.
+1. Generate a synthetic classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 5 numerical features, and 2 categorical features (one with 3 unique values, one with 5 unique values). Introduce missing values (e.g., `np.nan`) into two of the numerical features.
+2. Create an `sklearn.compose.ColumnTransformer` to preprocess the data:
+    *   For numerical features: Impute missing values with the mean, then apply `StandardScaler`.
+    *   For categorical features: Apply `OneHotEncoder`.
+3. Construct an `sklearn.pipeline.Pipeline` that first applies this `ColumnTransformer` and then trains a `RandomForestClassifier`.
+4. Evaluate the complete pipeline's performance using 5-fold cross-validation (`sklearn.model_selection.cross_val_score`) and report the mean accuracy and its standard deviation.
 
 ## Focus
-Feature Engineering (Interaction Features, Skewness Detection, Log Transformation)
+ML pipelines
 
 ## Dataset
-A synthetic pandas DataFrame (e.g., 1000 rows) where `feature_A` is uniform, `feature_B` is normal, `feature_C` is exponential, and `feature_D` is Poisson. Ensure `feature_C` and `feature_D` will likely be skewed.
+Synthetic (generated using `make_classification`)
 
 ## Hint
-Start by creating your synthetic DataFrame with `pd.DataFrame()` and `np.random` functions. Use `df.skew()` to quickly calculate skewness for all numerical columns. Remember `np.log1p(x)` handles zero values gracefully.
+Key `sklearn` components: `make_classification`, `ColumnTransformer`, `SimpleImputer`, `StandardScaler`, `OneHotEncoder`, `Pipeline`, `RandomForestClassifier`, `cross_val_score`.
