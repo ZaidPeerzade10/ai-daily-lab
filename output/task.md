@@ -1,17 +1,17 @@
-# AI Daily Lab — 2025-12-02
+# AI Daily Lab — 2025-12-03
 
 ## Task
-1. Create an in-memory SQLite database using the `sqlite3` module.
-2. Create two tables: `customers` (columns: `customer_id` (INTEGER PRIMARY KEY), `name` (TEXT), `city` (TEXT)) and `orders` (columns: `order_id` (INTEGER PRIMARY KEY), `customer_id` (INTEGER), `amount` (REAL), `order_date` (TEXT)). Ensure `customer_id` in `orders` is a foreign key referencing `customers`.
-3. Insert sample data into both tables (at least 5 distinct customers and 10-15 orders, ensuring some customers have multiple orders).
-4. Using a single SQL query, calculate the total purchase `amount` for each customer, retrieving the customer's `name` and their `total_revenue`, joining the `customers` and `orders` tables.
-5. Retrieve these aggregated results directly into a pandas DataFrame and display the top 3 customers by their `total_revenue`.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 500 samples and 5 features.
+2. Create an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to the features and then fits a `Ridge` regressor.
+3. Define a hyperparameter grid for the `Ridge` regressor within the pipeline, tuning the `alpha` parameter across at least 3 distinct values (e.g., `[0.1, 1.0, 10.0]`).
+4. Use `sklearn.model_selection.GridSearchCV` with the pipeline and the defined parameter grid to find the best hyperparameters. Use `neg_mean_squared_error` as the scoring metric and apply 3-fold cross-validation.
+5. Report the best hyperparameters found by `GridSearchCV` and the corresponding best score (remembering to convert the `neg_mean_squared_error` back to a positive MSE value).
 
 ## Focus
-SQL analytics, database interaction with Python, pandas integration
+ML pipelines, basic AI experimentation, model evaluation
 
 ## Dataset
-Synthetic data created in-memory with `sqlite3`
+Synthetic data from `sklearn.datasets.make_regression`
 
 ## Hint
-Use `sqlite3` for database connection and table/data creation. Leverage `pandas.read_sql_query` to execute your SQL query and fetch results directly into a DataFrame. Your SQL query will need `JOIN`, `GROUP BY`, and `SUM` aggregate function.
+When defining the parameter grid for `GridSearchCV` for a pipeline, prefix the regressor's parameter names with its name in the pipeline (e.g., `ridge__alpha`). Remember that `GridSearchCV` returns a negative score for `neg_mean_squared_error`, so you'll need to multiply by -1 to get the actual MSE.
