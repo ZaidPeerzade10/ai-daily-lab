@@ -1,17 +1,19 @@
-# AI Daily Lab — 2025-12-03
+# AI Daily Lab — 2025-12-04
 
 ## Task
-1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 500 samples and 5 features.
-2. Create an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to the features and then fits a `Ridge` regressor.
-3. Define a hyperparameter grid for the `Ridge` regressor within the pipeline, tuning the `alpha` parameter across at least 3 distinct values (e.g., `[0.1, 1.0, 10.0]`).
-4. Use `sklearn.model_selection.GridSearchCV` with the pipeline and the defined parameter grid to find the best hyperparameters. Use `neg_mean_squared_error` as the scoring metric and apply 3-fold cross-validation.
-5. Report the best hyperparameters found by `GridSearchCV` and the corresponding best score (remembering to convert the `neg_mean_squared_error` back to a positive MSE value).
+1. Generate a synthetic dataset using `sklearn.datasets.make_blobs` with at least 500 samples, 4 numerical features, and 3 distinct clusters. Convert this into a pandas DataFrame, including the cluster labels as a feature (e.g., `cluster_id`).
+2. Add a new categorical feature to the DataFrame (e.g., `group`) with 2-3 distinct values, randomly assigned.
+3. Using `seaborn` and `matplotlib.pyplot`, create the following visualizations to explore the data:
+    *   A pair plot (`sns.pairplot`) for the numerical features, coloring the points by the `cluster_id`.
+    *   A set of histograms (or KDE plots) for `feature_1` and `feature_2`, separated for each unique value of the newly created `group` categorical feature (e.g., using `sns.FacetGrid` or `sns.histplot` with `hue` and `col`).
+    *   A box plot (or violin plot) showing the distribution of `feature_3` across the different `cluster_id`s.
+4. Ensure all plots have appropriate titles and labels.
 
 ## Focus
-ML pipelines, basic AI experimentation, model evaluation
+data visualization
 
 ## Dataset
-Synthetic data from `sklearn.datasets.make_regression`
+Synthetic data generated with `sklearn.datasets.make_blobs` and additional pandas DataFrame manipulation.
 
 ## Hint
-When defining the parameter grid for `GridSearchCV` for a pipeline, prefix the regressor's parameter names with its name in the pipeline (e.g., `ridge__alpha`). Remember that `GridSearchCV` returns a negative score for `neg_mean_squared_error`, so you'll need to multiply by -1 to get the actual MSE.
+Leverage `seaborn` for high-level plotting functions like `pairplot`, `histplot`, and `boxplot`. For separated histograms/KDEs, consider `sns.FacetGrid` or using `hue` and `col` parameters in `sns.histplot`.
