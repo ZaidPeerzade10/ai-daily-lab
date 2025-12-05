@@ -1,19 +1,18 @@
-# AI Daily Lab — 2025-12-04
+# AI Daily Lab — 2025-12-05
 
 ## Task
-1. Generate a synthetic dataset using `sklearn.datasets.make_blobs` with at least 500 samples, 4 numerical features, and 3 distinct clusters. Convert this into a pandas DataFrame, including the cluster labels as a feature (e.g., `cluster_id`).
-2. Add a new categorical feature to the DataFrame (e.g., `group`) with 2-3 distinct values, randomly assigned.
-3. Using `seaborn` and `matplotlib.pyplot`, create the following visualizations to explore the data:
-    *   A pair plot (`sns.pairplot`) for the numerical features, coloring the points by the `cluster_id`.
-    *   A set of histograms (or KDE plots) for `feature_1` and `feature_2`, separated for each unique value of the newly created `group` categorical feature (e.g., using `sns.FacetGrid` or `sns.histplot` with `hue` and `col`).
-    *   A box plot (or violin plot) showing the distribution of `feature_3` across the different `cluster_id`s.
-4. Ensure all plots have appropriate titles and labels.
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` (e.g., 1000 samples, 10 features, 2 informative features, 2 classes).
+2. Split the dataset into training and testing sets (e.g., 80/20 split) using `train_test_split`.
+3. Train a `LogisticRegression` model on the training data.
+4. Predict class labels and class probabilities for the positive class on the test set.
+5. Calculate and print the following evaluation metrics for the test set predictions: Accuracy, Precision, Recall, F1-score, and ROC AUC score.
+6. Plot the Receiver Operating Characteristic (ROC) curve for the model using `matplotlib.pyplot`, clearly labeling axes and adding a title. Include the AUC score in the plot legend.
 
 ## Focus
-data visualization
+model evaluation
 
 ## Dataset
-Synthetic data generated with `sklearn.datasets.make_blobs` and additional pandas DataFrame manipulation.
+synthetic classification (sklearn.datasets.make_classification)
 
 ## Hint
-Leverage `seaborn` for high-level plotting functions like `pairplot`, `histplot`, and `boxplot`. For separated histograms/KDEs, consider `sns.FacetGrid` or using `hue` and `col` parameters in `sns.histplot`.
+Remember to import necessary metrics from `sklearn.metrics` such as `accuracy_score`, `precision_score`, `recall_score`, `f1_score`, `roc_auc_score`, and `roc_curve`. For plotting the ROC curve, you'll need the false positive rates (fpr) and true positive rates (tpr) from `roc_curve`.
