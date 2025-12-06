@@ -1,18 +1,18 @@
-# AI Daily Lab — 2025-12-05
+# AI Daily Lab — 2025-12-06
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` (e.g., 1000 samples, 10 features, 2 informative features, 2 classes).
-2. Split the dataset into training and testing sets (e.g., 80/20 split) using `train_test_split`.
-3. Train a `LogisticRegression` model on the training data.
-4. Predict class labels and class probabilities for the positive class on the test set.
-5. Calculate and print the following evaluation metrics for the test set predictions: Accuracy, Precision, Recall, F1-score, and ROC AUC score.
-6. Plot the Receiver Operating Characteristic (ROC) curve for the model using `matplotlib.pyplot`, clearly labeling axes and adding a title. Include the AUC score in the plot legend.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 500 samples, 3 informative features, and a small amount of noise.
+2. Create two distinct `sklearn.pipeline.Pipeline` objects:
+    *   `pipeline_simple`: Consisting of `StandardScaler` followed by `LinearRegression`.
+    *   `pipeline_poly`: Consisting of `PolynomialFeatures` (set `degree=2`), then `StandardScaler`, then `LinearRegression`.
+3. Evaluate both pipelines using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric.
+4. Print the mean and standard deviation of the Mean Squared Error (MSE) for both pipelines, clearly indicating which result belongs to which pipeline. (Remember to convert `neg_mean_squared_error` to positive MSE values for interpretability).
 
 ## Focus
-model evaluation
+ML Pipelines, Feature Engineering (Polynomial Features), Model Evaluation
 
 ## Dataset
-synthetic classification (sklearn.datasets.make_classification)
+Synthetic regression dataset (`sklearn.datasets.make_regression`)
 
 ## Hint
-Remember to import necessary metrics from `sklearn.metrics` such as `accuracy_score`, `precision_score`, `recall_score`, `f1_score`, `roc_auc_score`, and `roc_curve`. For plotting the ROC curve, you'll need the false positive rates (fpr) and true positive rates (tpr) from `roc_curve`.
+Remember to import all necessary components from `sklearn.preprocessing`, `sklearn.linear_model`, `sklearn.pipeline`, and `sklearn.model_selection`. The `PolynomialFeatures` step should be placed before `StandardScaler` in `pipeline_poly` to ensure scaling is applied to the newly created polynomial features.
