@@ -1,18 +1,19 @@
-# AI Daily Lab — 2025-12-06
+# AI Daily Lab — 2025-12-07
 
 ## Task
-1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 500 samples, 3 informative features, and a small amount of noise.
-2. Create two distinct `sklearn.pipeline.Pipeline` objects:
-    *   `pipeline_simple`: Consisting of `StandardScaler` followed by `LinearRegression`.
-    *   `pipeline_poly`: Consisting of `PolynomialFeatures` (set `degree=2`), then `StandardScaler`, then `LinearRegression`.
-3. Evaluate both pipelines using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric.
-4. Print the mean and standard deviation of the Mean Squared Error (MSE) for both pipelines, clearly indicating which result belongs to which pipeline. (Remember to convert `neg_mean_squared_error` to positive MSE values for interpretability).
+1. Generate a pandas DataFrame with a `timestamp` column (daily data for 2-3 years) and a `value` column (e.g., synthetic sales data with some trend and seasonality, using `np.sin` or similar).
+2. From the `timestamp` column, create new features: `month` (numerical month), `day_of_week` (name of the day, e.g., 'Monday'), and `is_weekend` (boolean).
+3. Calculate the average `value` aggregated by `month` and by `day_of_week`.
+4. Create two visualizations using `seaborn` and `matplotlib.pyplot`:
+    *   A line plot showing the average `value` trend across months.
+    *   A bar plot showing the average `value` for each `day_of_week`.
+5. Display the head of the DataFrame with the new features and print the aggregated dataframes for both monthly and daily trends.
 
 ## Focus
-ML Pipelines, Feature Engineering (Polynomial Features), Model Evaluation
+pandas / numpy, feature engineering, data visualization
 
 ## Dataset
-Synthetic regression dataset (`sklearn.datasets.make_regression`)
+Synthetic time-series data generated with pandas and numpy.
 
 ## Hint
-Remember to import all necessary components from `sklearn.preprocessing`, `sklearn.linear_model`, `sklearn.pipeline`, and `sklearn.model_selection`. The `PolynomialFeatures` step should be placed before `StandardScaler` in `pipeline_poly` to ensure scaling is applied to the newly created polynomial features.
+Use `pd.date_range` to create the timestamp index. Leverage pandas `dt` accessor (e.g., `.dt.month`, `.dt.day_name()`, `.dt.weekday`) for feature extraction. Grouping and aggregation (`.groupby().mean()`) will be key for trends. Ensure `day_of_week` is ordered correctly in plots.
