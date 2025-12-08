@@ -1,19 +1,17 @@
-# AI Daily Lab — 2025-12-07
+# AI Daily Lab — 2025-12-08
 
 ## Task
-1. Generate a pandas DataFrame with a `timestamp` column (daily data for 2-3 years) and a `value` column (e.g., synthetic sales data with some trend and seasonality, using `np.sin` or similar).
-2. From the `timestamp` column, create new features: `month` (numerical month), `day_of_week` (name of the day, e.g., 'Monday'), and `is_weekend` (boolean).
-3. Calculate the average `value` aggregated by `month` and by `day_of_week`.
-4. Create two visualizations using `seaborn` and `matplotlib.pyplot`:
-    *   A line plot showing the average `value` trend across months.
-    *   A bar plot showing the average `value` for each `day_of_week`.
-5. Display the head of the DataFrame with the new features and print the aggregated dataframes for both monthly and daily trends.
+1. Generate a synthetic dataset suitable for clustering using `sklearn.datasets.make_blobs` with at least 700 samples, 6 numerical features, and 4 distinct clusters (do not use the true cluster labels for modeling).
+2. Apply `sklearn.cluster.KMeans` to the generated features to discover 4 clusters. Initialize KMeans with a `random_state` for reproducibility.
+3. Evaluate the quality of the discovered clusters by calculating the `sklearn.metrics.silhouette_score`.
+4. To visualize the clustering, reduce the dimensionality of the original features to 2 using `sklearn.decomposition.PCA`.
+5. Create a scatter plot using `matplotlib.pyplot` or `seaborn` of the 2 principal components, coloring the points based on the clusters identified by KMeans. Title the plot with the calculated Silhouette Score.
 
 ## Focus
-pandas / numpy, feature engineering, data visualization
+basic AI experimentation, model evaluation, data visualization
 
 ## Dataset
-Synthetic time-series data generated with pandas and numpy.
+Synthetic (sklearn.datasets.make_blobs)
 
 ## Hint
-Use `pd.date_range` to create the timestamp index. Leverage pandas `dt` accessor (e.g., `.dt.month`, `.dt.day_name()`, `.dt.weekday`) for feature extraction. Grouping and aggregation (`.groupby().mean()`) will be key for trends. Ensure `day_of_week` is ordered correctly in plots.
+Remember to import `KMeans`, `silhouette_score`, and `PCA` from `sklearn`. Convert the generated data into a pandas DataFrame for easier manipulation and plotting. For visualization, you'll need `matplotlib.pyplot` or `seaborn`.
