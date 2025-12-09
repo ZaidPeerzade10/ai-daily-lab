@@ -1,17 +1,19 @@
-# AI Daily Lab — 2025-12-08
+# AI Daily Lab — 2025-12-09
 
 ## Task
-1. Generate a synthetic dataset suitable for clustering using `sklearn.datasets.make_blobs` with at least 700 samples, 6 numerical features, and 4 distinct clusters (do not use the true cluster labels for modeling).
-2. Apply `sklearn.cluster.KMeans` to the generated features to discover 4 clusters. Initialize KMeans with a `random_state` for reproducibility.
-3. Evaluate the quality of the discovered clusters by calculating the `sklearn.metrics.silhouette_score`.
-4. To visualize the clustering, reduce the dimensionality of the original features to 2 using `sklearn.decomposition.PCA`.
-5. Create a scatter plot using `matplotlib.pyplot` or `seaborn` of the 2 principal components, coloring the points based on the clusters identified by KMeans. Title the plot with the calculated Silhouette Score.
+1. Generate a synthetic binary classification dataset (e.g., using `sklearn.datasets.make_classification`) with at least 1000 samples, 5 numerical features, and 1 conceptual 'high-cardinality' categorical feature. To create this categorical feature, generate a numerical feature with a large number of unique integer values (e.g., 50-100) and then convert it to string type.
+2. Split the dataset into training and testing sets (e.g., 70/30 split) using `train_test_split`.
+3. Create two distinct `sklearn.pipeline.Pipeline` objects for preprocessing and modeling:
+    *   `pipeline_onehot_encoding`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `OneHotEncoder(handle_unknown='ignore')`.
+    *   `pipeline_ordinal_encoding`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)`.
+4. Both pipelines should then fit a `LogisticRegression` model (using `solver='liblinear'` and a `random_state` for reproducibility).
+5. Train both pipelines on the training data and evaluate their performance on the test set. Report the `accuracy_score` and `f1_score` for each pipeline, clearly stating which encoding strategy yielded which result.
 
 ## Focus
-basic AI experimentation, model evaluation, data visualization
+Feature Engineering / ML Pipelines / Model Evaluation
 
 ## Dataset
-Synthetic (sklearn.datasets.make_blobs)
+Synthetic classification dataset generated using `sklearn.datasets.make_classification` combined with a custom high-cardinality categorical feature.
 
 ## Hint
-Remember to import `KMeans`, `silhouette_score`, and `PCA` from `sklearn`. Convert the generated data into a pandas DataFrame for easier manipulation and plotting. For visualization, you'll need `matplotlib.pyplot` or `seaborn`.
+When creating the high-cardinality categorical feature, you can generate random integers within a broad range and then map them to unique string values (e.g., using a dictionary or f-strings). Ensure `ColumnTransformer` correctly identifies numerical and categorical features. Remember to explicitly set `handle_unknown` parameters for `OneHotEncoder` and `OrdinalEncoder` for robustness against unseen categories in the test set.
