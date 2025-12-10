@@ -1,19 +1,23 @@
-# AI Daily Lab — 2025-12-09
+# AI Daily Lab — 2025-12-10
 
 ## Task
-1. Generate a synthetic binary classification dataset (e.g., using `sklearn.datasets.make_classification`) with at least 1000 samples, 5 numerical features, and 1 conceptual 'high-cardinality' categorical feature. To create this categorical feature, generate a numerical feature with a large number of unique integer values (e.g., 50-100) and then convert it to string type.
-2. Split the dataset into training and testing sets (e.g., 70/30 split) using `train_test_split`.
-3. Create two distinct `sklearn.pipeline.Pipeline` objects for preprocessing and modeling:
-    *   `pipeline_onehot_encoding`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `OneHotEncoder(handle_unknown='ignore')`.
-    *   `pipeline_ordinal_encoding`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)`.
-4. Both pipelines should then fit a `LogisticRegression` model (using `solver='liblinear'` and a `random_state` for reproducibility).
-5. Train both pipelines on the training data and evaluate their performance on the test set. Report the `accuracy_score` and `f1_score` for each pipeline, clearly stating which encoding strategy yielded which result.
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_moons` with at least 1000 samples, `noise=0.1`, and `random_state=42`.
+2. Split the dataset into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split`.
+3. Build a simple feedforward neural network using `tf.keras.Sequential`:
+    *   An input `tf.keras.layers.Dense` layer suitable for the number of features.
+    *   A hidden `Dense` layer with 32 units and `relu` activation.
+    *   Another hidden `Dense` layer with 16 units and `relu` activation.
+    *   An output `Dense` layer with 1 unit and `sigmoid` activation.
+4. Compile the model with `optimizer='adam'`, `loss='binary_crossentropy'`, and `metrics=['accuracy']`.
+5. Train the model on the training data for a fixed number of epochs (e.g., 50) with a batch size (e.g., 32), storing the training history.
+6. Evaluate the trained model on the test set and print the test accuracy.
+7. Plot the training and validation accuracy and loss over epochs from the training history using `matplotlib.pyplot`, clearly labeling the axes and providing a title.
 
 ## Focus
-Feature Engineering / ML Pipelines / Model Evaluation
+basic AI experimentation
 
 ## Dataset
-Synthetic classification dataset generated using `sklearn.datasets.make_classification` combined with a custom high-cardinality categorical feature.
+synthetic binary classification data (`make_moons`)
 
 ## Hint
-When creating the high-cardinality categorical feature, you can generate random integers within a broad range and then map them to unique string values (e.g., using a dictionary or f-strings). Ensure `ColumnTransformer` correctly identifies numerical and categorical features. Remember to explicitly set `handle_unknown` parameters for `OneHotEncoder` and `OrdinalEncoder` for robustness against unseen categories in the test set.
+Ensure your input layer `input_shape` matches your feature dimension. Remember to import `tensorflow` and `matplotlib.pyplot`.
