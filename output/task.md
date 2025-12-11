@@ -1,23 +1,21 @@
-# AI Daily Lab — 2025-12-10
+# AI Daily Lab — 2025-12-11
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_moons` with at least 1000 samples, `noise=0.1`, and `random_state=42`.
-2. Split the dataset into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split`.
-3. Build a simple feedforward neural network using `tf.keras.Sequential`:
-    *   An input `tf.keras.layers.Dense` layer suitable for the number of features.
-    *   A hidden `Dense` layer with 32 units and `relu` activation.
-    *   Another hidden `Dense` layer with 16 units and `relu` activation.
-    *   An output `Dense` layer with 1 unit and `sigmoid` activation.
-4. Compile the model with `optimizer='adam'`, `loss='binary_crossentropy'`, and `metrics=['accuracy']`.
-5. Train the model on the training data for a fixed number of epochs (e.g., 50) with a batch size (e.g., 32), storing the training history.
-6. Evaluate the trained model on the test set and print the test accuracy.
-7. Plot the training and validation accuracy and loss over epochs from the training history using `matplotlib.pyplot`, clearly labeling the axes and providing a title.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 500 samples, 7 features, and a small amount of noise.
+2. Implement a custom `sklearn` transformer (inheriting from `BaseEstimator`, `TransformerMixin`) named `CustomPolynomialFeatures`.
+   This transformer should take a list of feature names (or indices) as an initialization argument. Its `transform` method should apply `PolynomialFeatures` (with `degree=2`, `include_bias=False`) only to the specified features, and pass through other features unchanged.
+3. Create an `sklearn.pipeline.Pipeline` that uses an `sklearn.compose.ColumnTransformer`.
+   *   Apply `StandardScaler` to all numerical features *not* handled by your custom transformer.
+   *   Apply your `CustomPolynomialFeatures` transformer to 3-4 specific numerical features.
+   *   The pipeline should then fit a `Ridge` regressor.
+4. Evaluate the pipeline's performance using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric.
+5. Print the mean and standard deviation of the Mean Squared Error (MSE) for the pipeline (remembering to convert `neg_mean_squared_error` to positive MSE values).
 
 ## Focus
-basic AI experimentation
+ML Pipelines / Feature Engineering
 
 ## Dataset
-synthetic binary classification data (`make_moons`)
+`sklearn.datasets.make_regression`
 
 ## Hint
-Ensure your input layer `input_shape` matches your feature dimension. Remember to import `tensorflow` and `matplotlib.pyplot`.
+For your `CustomPolynomialFeatures` transformer, the `fit` method can simply return `self`. In the `transform` method, ensure you correctly select the columns for polynomial transformation, apply it, and then combine the transformed features with the untouched features. When setting up the `ColumnTransformer`, use `make_column_selector` or explicit lists of column names/indices to route features to the correct transformers, and remember the 'remainder' parameter for handling untransformed features.
