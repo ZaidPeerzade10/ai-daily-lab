@@ -1,19 +1,20 @@
-# AI Daily Lab — 2025-12-12
+# AI Daily Lab — 2025-12-13
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 4 numerical features, and 2 classes. Convert the features and target into a pandas DataFrame.
-2. Select two of the original numerical features (e.g., `feature_0`, `feature_1`) and apply `pd.cut` to each of them to discretize them into 3-4 bins (e.g., `['low', 'medium', 'high']`). These new binned features should be categorical and added to the DataFrame.
-3. Create an `sklearn.compose.ColumnTransformer` to preprocess the data:
-    *   For the *remaining original* numerical features (those not binned): Apply `StandardScaler`.
-    *   For the *newly binned* categorical features: Apply `OneHotEncoder(handle_unknown='ignore')`.
-4. Construct an `sklearn.pipeline.Pipeline` that first applies this `ColumnTransformer` and then trains a `GradientBoostingClassifier` (set `random_state` for reproducibility).
-5. Evaluate the complete pipeline's performance using 5-fold cross-validation (`sklearn.model_selection.cross_val_score`) with `accuracy` as the scoring metric. Report the mean accuracy and its standard deviation.
+1. Create an in-memory SQLite database using the `sqlite3` module.
+2. Create a `transactions` table with the following columns: `transaction_id` (INTEGER PRIMARY KEY), `customer_id` (INTEGER), `product_id` (INTEGER), `transaction_date` (TEXT in 'YYYY-MM-DD' format), and `amount` (REAL).
+3. Insert synthetic data into the `transactions` table. Include at least 5 distinct customers, 3 distinct products, and 20-30 transactions spanning a few months.
+4. Write a single SQL query that uses **window functions** to calculate the following for each transaction:
+    *   `customer_monthly_total`: The sum of `amount` for that specific `customer_id` within the month of the `transaction_date`.
+    *   `customer_monthly_avg_transaction`: The average `amount` for that specific `customer_id` within the month of the `transaction_date`.
+    *   `customer_cumulative_total`: The running total of `amount` for that specific `customer_id`, ordered by `transaction_date`.
+5. Retrieve the results of this SQL query into a pandas DataFrame. Display `transaction_date`, `customer_id`, `amount`, `customer_monthly_total`, `customer_monthly_avg_transaction`, and `customer_cumulative_total`. Show the head of the DataFrame.
 
 ## Focus
-feature engineering, ML pipelines, model evaluation
+SQL analytics
 
 ## Dataset
-synthetic classification
+Synthetic `transactions` data generated in-memory.
 
 ## Hint
-When setting up the `ColumnTransformer`, ensure you correctly identify which features go to `StandardScaler` (original numerical features that were *not* binned) and which go to `OneHotEncoder` (the *new* binned categorical features). Use `make_column_transformer` for easier column selection.
+Use `strftime('%Y-%m', transaction_date)` to extract the month for window partitioning. For monthly aggregates, use `PARTITION BY customer_id, strftime('%Y-%m', transaction_date)`. For cumulative sums, use `PARTITION BY customer_id ORDER BY transaction_date`.
