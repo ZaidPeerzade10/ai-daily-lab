@@ -1,20 +1,20 @@
-# AI Daily Lab — 2025-12-13
+# AI Daily Lab — 2025-12-14
 
 ## Task
-1. Create an in-memory SQLite database using the `sqlite3` module.
-2. Create a `transactions` table with the following columns: `transaction_id` (INTEGER PRIMARY KEY), `customer_id` (INTEGER), `product_id` (INTEGER), `transaction_date` (TEXT in 'YYYY-MM-DD' format), and `amount` (REAL).
-3. Insert synthetic data into the `transactions` table. Include at least 5 distinct customers, 3 distinct products, and 20-30 transactions spanning a few months.
-4. Write a single SQL query that uses **window functions** to calculate the following for each transaction:
-    *   `customer_monthly_total`: The sum of `amount` for that specific `customer_id` within the month of the `transaction_date`.
-    *   `customer_monthly_avg_transaction`: The average `amount` for that specific `customer_id` within the month of the `transaction_date`.
-    *   `customer_cumulative_total`: The running total of `amount` for that specific `customer_id`, ordered by `transaction_date`.
-5. Retrieve the results of this SQL query into a pandas DataFrame. Display `transaction_date`, `customer_id`, `amount`, `customer_monthly_total`, `customer_monthly_avg_transaction`, and `customer_cumulative_total`. Show the head of the DataFrame.
+1. Generate a pandas DataFrame with synthetic transaction data, including `customer_id` (5-10 unique), `transaction_date` (spanning 6-12 months of daily data), `amount` (random float), and `product_category` (3-5 unique strings).
+2. For each transaction, calculate two new features using *window functions* (Pandas `groupby` + `rolling` or `expanding`):
+    *   `customer_30d_avg_spend`: The average `amount` for that specific `customer_id` over the *past 30 days*, inclusive of the current transaction date.
+    *   `customer_cumulative_transactions`: The running total count of transactions for that specific `customer_id`, ordered by `transaction_date`.
+3. Aggregate the data to find:
+    *   The total `amount` spent by each `customer_id` for each `month`.
+    *   The `product_category` with the highest total `amount` spent across *all* customers for each `month`.
+4. Display the head of the DataFrame with the new features and print the aggregated monthly customer spending and the top product categories per month.
 
 ## Focus
-SQL analytics
+pandas / numpy
 
 ## Dataset
-Synthetic `transactions` data generated in-memory.
+Synthetic customer transaction data (customer_id, transaction_date, amount, product_category)
 
 ## Hint
-Use `strftime('%Y-%m', transaction_date)` to extract the month for window partitioning. For monthly aggregates, use `PARTITION BY customer_id, strftime('%Y-%m', transaction_date)`. For cumulative sums, use `PARTITION BY customer_id ORDER BY transaction_date`.
+For rolling features, first ensure your DataFrame is sorted by `customer_id` and `transaction_date`. Use `groupby('customer_id')['amount'].transform(lambda x: x.rolling(window='30D', on=df.loc[x.index, 'transaction_date']).mean())` for the rolling average. For cumulative count, `groupby('customer_id').cumcount() + 1` is effective. For monthly aggregations, extract the month using `dt.to_period('M')` or `dt.month` from the `transaction_date` column.
