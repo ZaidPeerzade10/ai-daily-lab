@@ -1,20 +1,17 @@
-# AI Daily Lab — 2025-12-14
+# AI Daily Lab — 2025-12-15
 
 ## Task
-1. Generate a pandas DataFrame with synthetic transaction data, including `customer_id` (5-10 unique), `transaction_date` (spanning 6-12 months of daily data), `amount` (random float), and `product_category` (3-5 unique strings).
-2. For each transaction, calculate two new features using *window functions* (Pandas `groupby` + `rolling` or `expanding`):
-    *   `customer_30d_avg_spend`: The average `amount` for that specific `customer_id` over the *past 30 days*, inclusive of the current transaction date.
-    *   `customer_cumulative_transactions`: The running total count of transactions for that specific `customer_id`, ordered by `transaction_date`.
-3. Aggregate the data to find:
-    *   The total `amount` spent by each `customer_id` for each `month`.
-    *   The `product_category` with the highest total `amount` spent across *all* customers for each `month`.
-4. Display the head of the DataFrame with the new features and print the aggregated monthly customer spending and the top product categories per month.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 5 informative features, and a small amount of noise. Additionally, generate 5 completely random, uninformative features (e.g., using `np.random.rand`) and concatenate them to your original features, creating a feature matrix `X` with 10 features.
+2. Create an `sklearn.pipeline.Pipeline` that first applies `StandardScaler`, then uses `sklearn.feature_selection.SelectKBest` (with `f_regression` as the score function) for feature selection, and finally fits a `LinearRegression` model.
+3. Define a hyperparameter grid for `sklearn.model_selection.GridSearchCV` to tune the `k` parameter of `SelectKBest` (e.g., `[3, 5, 7, 10]` to explore different numbers of selected features).
+4. Use `GridSearchCV` with the pipeline and the defined parameter grid. Perform 3-fold cross-validation and use `neg_mean_squared_error` as the scoring metric.
+5. Report the best `k` value found, the corresponding best cross-validation score (converting `neg_mean_squared_error` to positive MSE), and the indices of the features selected by the best model (you might need to extract the `SelectKBest` step from the best estimator).
 
 ## Focus
-pandas / numpy
+Feature Selection, ML Pipelines, Hyperparameter Tuning, Regression
 
 ## Dataset
-Synthetic customer transaction data (customer_id, transaction_date, amount, product_category)
+Synthetic regression data (`make_regression`) augmented with random noise features.
 
 ## Hint
-For rolling features, first ensure your DataFrame is sorted by `customer_id` and `transaction_date`. Use `groupby('customer_id')['amount'].transform(lambda x: x.rolling(window='30D', on=df.loc[x.index, 'transaction_date']).mean())` for the rolling average. For cumulative count, `groupby('customer_id').cumcount() + 1` is effective. For monthly aggregations, extract the month using `dt.to_period('M')` or `dt.month` from the `transaction_date` column.
+When setting up `SelectKBest` in the pipeline, remember to specify the score function (`f_regression`). For `GridSearchCV`, the parameter for `SelectKBest` will be `selectkbest__k` (lowercase and double underscore) in the `param_grid`. To get the selected features from the best estimator, you can access `best_estimator_.named_steps['selectkbest'].get_support(indices=True)`.
