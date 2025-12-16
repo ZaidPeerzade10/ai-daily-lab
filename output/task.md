@@ -1,17 +1,22 @@
-# AI Daily Lab — 2025-12-15
+# AI Daily Lab — 2025-12-16
 
 ## Task
-1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 5 informative features, and a small amount of noise. Additionally, generate 5 completely random, uninformative features (e.g., using `np.random.rand`) and concatenate them to your original features, creating a feature matrix `X` with 10 features.
-2. Create an `sklearn.pipeline.Pipeline` that first applies `StandardScaler`, then uses `sklearn.feature_selection.SelectKBest` (with `f_regression` as the score function) for feature selection, and finally fits a `LinearRegression` model.
-3. Define a hyperparameter grid for `sklearn.model_selection.GridSearchCV` to tune the `k` parameter of `SelectKBest` (e.g., `[3, 5, 7, 10]` to explore different numbers of selected features).
-4. Use `GridSearchCV` with the pipeline and the defined parameter grid. Perform 3-fold cross-validation and use `neg_mean_squared_error` as the scoring metric.
-5. Report the best `k` value found, the corresponding best cross-validation score (converting `neg_mean_squared_error` to positive MSE), and the indices of the features selected by the best model (you might need to extract the `SelectKBest` step from the best estimator).
+1. Generate a pandas DataFrame with a `date` column (daily data for 2-3 years, starting from a fixed date like '2020-01-01'), a `value` column (synthetic time-series data with a linear trend, seasonality using `np.sin`, and some noise), and two additional numerical features (`feature_A`, `feature_B`) which can be random.
+2. Using `pandas` operations, create the following new features:
+    *   `lag_1_value`: The `value` from the previous day.
+    *   `rolling_7d_mean_feature_A`: A 7-day rolling mean of `feature_A`.
+    *   `day_of_week_num`: Numerical day of the week (0-6).
+    *   `month_num`: Numerical month (1-12).
+3. Handle any `NaN` values introduced by lag/rolling features (e.g., by dropping the first few rows).
+4. Split the dataset into training and testing sets based on time (e.g., use the first 80% of data for training and the remaining 20% for testing).
+5. Construct an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to all numerical features (including the newly engineered ones) and then trains a `Ridge` regressor.
+6. Train the pipeline on the training data and evaluate its performance on the test set, reporting the Mean Absolute Error (MAE) and R-squared score.
 
 ## Focus
-Feature Selection, ML Pipelines, Hyperparameter Tuning, Regression
+pandas / numpy, feature engineering, ML pipelines, model evaluation
 
 ## Dataset
-Synthetic regression data (`make_regression`) augmented with random noise features.
+Synthetic time-series regression data with a `date` column and multiple features.
 
 ## Hint
-When setting up `SelectKBest` in the pipeline, remember to specify the score function (`f_regression`). For `GridSearchCV`, the parameter for `SelectKBest` will be `selectkbest__k` (lowercase and double underscore) in the `param_grid`. To get the selected features from the best estimator, you can access `best_estimator_.named_steps['selectkbest'].get_support(indices=True)`.
+Ensure your DataFrame is sorted by `date` before creating lag and rolling features. When splitting the data based on time, remember to select features and target correctly after handling NaNs. For the pipeline, identify all numerical features (original + engineered) that need scaling. Evaluate using `mean_absolute_error` and `r2_score` from `sklearn.metrics`.
