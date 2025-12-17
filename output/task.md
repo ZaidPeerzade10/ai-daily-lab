@@ -1,22 +1,20 @@
-# AI Daily Lab — 2025-12-16
+# AI Daily Lab — 2025-12-17
 
 ## Task
-1. Generate a pandas DataFrame with a `date` column (daily data for 2-3 years, starting from a fixed date like '2020-01-01'), a `value` column (synthetic time-series data with a linear trend, seasonality using `np.sin`, and some noise), and two additional numerical features (`feature_A`, `feature_B`) which can be random.
-2. Using `pandas` operations, create the following new features:
-    *   `lag_1_value`: The `value` from the previous day.
-    *   `rolling_7d_mean_feature_A`: A 7-day rolling mean of `feature_A`.
-    *   `day_of_week_num`: Numerical day of the week (0-6).
-    *   `month_num`: Numerical month (1-12).
-3. Handle any `NaN` values introduced by lag/rolling features (e.g., by dropping the first few rows).
-4. Split the dataset into training and testing sets based on time (e.g., use the first 80% of data for training and the remaining 20% for testing).
-5. Construct an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to all numerical features (including the newly engineered ones) and then trains a `Ridge` regressor.
-6. Train the pipeline on the training data and evaluate its performance on the test set, reporting the Mean Absolute Error (MAE) and R-squared score.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with at least 800 samples, 4 informative features, and a small amount of noise.
+2. Create a new numerical feature named `time_of_day` for each sample, ranging from 0 to 23 (e.g., using `np.random.randint`). Add this feature to your feature matrix `X`.
+3. From `time_of_day`, create two new features: `time_of_day_sin` and `time_of_day_cos`, applying sine and cosine transformations respectively (e.g., `np.sin(2 * np.pi * time_of_day / 24)`).
+4. Create two `sklearn.pipeline.Pipeline` objects:
+    *   `pipeline_raw_tod`: Uses `sklearn.compose.ColumnTransformer` to apply `StandardScaler` to all original `make_regression` features AND the raw `time_of_day` feature. Then fit a `Ridge` regressor.
+    *   `pipeline_cyclical_tod`: Uses `sklearn.compose.ColumnTransformer` to apply `StandardScaler` to all original `make_regression` features AND the `time_of_day_sin` and `time_of_day_cos` features. The raw `time_of_day` feature should *not* be used in this pipeline.
+5. Evaluate both pipelines using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `r2` as the scoring metric.
+6. Print the mean and standard deviation of the R-squared scores for both pipelines, clearly indicating the performance difference due to cyclical feature encoding.
 
 ## Focus
-pandas / numpy, feature engineering, ML pipelines, model evaluation
+Feature Engineering (Cyclical Encoding), ML Pipelines, Model Evaluation
 
 ## Dataset
-Synthetic time-series regression data with a `date` column and multiple features.
+Synthetic regression data generated with `make_regression` and additional engineered cyclical features.
 
 ## Hint
-Ensure your DataFrame is sorted by `date` before creating lag and rolling features. When splitting the data based on time, remember to select features and target correctly after handling NaNs. For the pipeline, identify all numerical features (original + engineered) that need scaling. Evaluate using `mean_absolute_error` and `r2_score` from `sklearn.metrics`.
+Remember to properly define your feature sets for the `ColumnTransformer` in each pipeline. For the `pipeline_cyclical_tod`, ensure you explicitly exclude the raw `time_of_day` feature while including its sine and cosine transformations.
