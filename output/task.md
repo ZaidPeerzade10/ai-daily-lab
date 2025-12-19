@@ -1,18 +1,22 @@
-# AI Daily Lab — 2025-12-18
+# AI Daily Lab — 2025-12-19
 
 ## Task
-1. Generate a synthetic multi-class classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 10 features (e.g., `n_informative=5`), and 3 distinct classes (set `random_state` for reproducibility).
-2. Split the dataset into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split`.
-3. Train a `sklearn.ensemble.RandomForestClassifier` on the training data (set `random_state` for reproducibility).
-4. Predict class labels on the test set.
-5. Print a detailed classification report using `sklearn.metrics.classification_report` to show precision, recall, and f1-score for each class.
-6. Plot the confusion matrix for the test set predictions using `sklearn.metrics.ConfusionMatrixDisplay.from_estimator`, ensuring appropriate labels and a title.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 6 informative features, and a small amount of noise. Convert the features (`X`) into a pandas DataFrame, assigning generic column names (e.g., `feature_0`, `feature_1`, ..., `feature_5`).
+2. **Feature Engineering**: Create a new interaction feature named `feature_0_x_feature_1` by multiplying `feature_0` and `feature_1`. Add this new feature to a *copy* of your DataFrame to create `X_with_interaction`. Keep the original DataFrame as `X_original`.
+3. Create two `sklearn.pipeline.Pipeline` objects, both consisting of `StandardScaler` followed by `LinearRegression`.
+    *   `pipeline_no_interaction`
+    *   `pipeline_with_interaction`
+4. Evaluate both pipelines using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric:
+    *   Evaluate `pipeline_no_interaction` using `X_original` and the target `y`.
+    *   Evaluate `pipeline_with_interaction` using `X_with_interaction` and the target `y`.
+    Print the mean and standard deviation of the Mean Squared Error (MSE) for both, clearly labeling results.
+5. **Feature Importance Visualization**: Train `pipeline_with_interaction` on the *entire* `X_with_interaction` and `y` dataset. Extract the coefficients from the `LinearRegression` model within this trained pipeline. Create a bar plot using `matplotlib.pyplot` or `seaborn` showing the *absolute magnitude* of these coefficients. Map these to their corresponding feature names from `X_with_interaction`. Title the plot appropriately, e.g., 'Linear Regression Coefficients (Absolute Magnitude)'.
 
 ## Focus
-model evaluation, data visualization, ML pipelines
+Feature Engineering, ML Pipelines, Model Evaluation, Data Visualization
 
 ## Dataset
-sklearn.datasets.make_classification (synthetic multi-class)
+sklearn.datasets.make_regression
 
 ## Hint
-Remember that `make_classification` allows you to specify `n_classes`. For plotting the confusion matrix, `ConfusionMatrixDisplay.from_estimator` is a convenient function that directly takes your fitted model and test data.
+When setting up the pipelines, the `StandardScaler` and `LinearRegression` steps can be named for easier access (e.g., `('scaler', StandardScaler())`, `('regressor', LinearRegression())`). To access coefficients from a trained pipeline, use `pipeline_with_interaction.named_steps['regressor'].coef_`. Ensure your feature names for the plot match the columns of `X_with_interaction`.
