@@ -1,22 +1,19 @@
-# AI Daily Lab — 2025-12-19
+# AI Daily Lab — 2025-12-20
 
 ## Task
-1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 6 informative features, and a small amount of noise. Convert the features (`X`) into a pandas DataFrame, assigning generic column names (e.g., `feature_0`, `feature_1`, ..., `feature_5`).
-2. **Feature Engineering**: Create a new interaction feature named `feature_0_x_feature_1` by multiplying `feature_0` and `feature_1`. Add this new feature to a *copy* of your DataFrame to create `X_with_interaction`. Keep the original DataFrame as `X_original`.
-3. Create two `sklearn.pipeline.Pipeline` objects, both consisting of `StandardScaler` followed by `LinearRegression`.
-    *   `pipeline_no_interaction`
-    *   `pipeline_with_interaction`
-4. Evaluate both pipelines using `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric:
-    *   Evaluate `pipeline_no_interaction` using `X_original` and the target `y`.
-    *   Evaluate `pipeline_with_interaction` using `X_with_interaction` and the target `y`.
-    Print the mean and standard deviation of the Mean Squared Error (MSE) for both, clearly labeling results.
-5. **Feature Importance Visualization**: Train `pipeline_with_interaction` on the *entire* `X_with_interaction` and `y` dataset. Extract the coefficients from the `LinearRegression` model within this trained pipeline. Create a bar plot using `matplotlib.pyplot` or `seaborn` showing the *absolute magnitude* of these coefficients. Map these to their corresponding feature names from `X_with_interaction`. Title the plot appropriately, e.g., 'Linear Regression Coefficients (Absolute Magnitude)'.
+1. Create an in-memory SQLite database using the `sqlite3` module.
+2. Create two tables:
+    *   `customers` with columns: `customer_id` (INTEGER PRIMARY KEY), `name` (TEXT), `region` (TEXT).
+    *   `orders` with columns: `order_id` (INTEGER PRIMARY KEY), `customer_id` (INTEGER, FOREIGN KEY), `order_date` (TEXT in 'YYYY-MM-DD' format), `total_amount` (REAL).
+3. Insert synthetic data into both tables. Ensure you have at least 5 distinct customers, 3 distinct regions, and 20-30 orders spanning a few months, with some customers having multiple orders.
+4. Write a single SQL query to find the `customer_id`, `name`, `region`, and `total_spent` (sum of all their `total_amount`s) for customers whose `total_spent` is greater than the `average_order_value_per_region` (the average `total_amount` of all orders originating from their specific `region`). Order the results by `total_spent` in descending order.
+5. Retrieve the results of this SQL query into a pandas DataFrame and display the head of the DataFrame.
 
 ## Focus
-Feature Engineering, ML Pipelines, Model Evaluation, Data Visualization
+SQL analytics
 
 ## Dataset
-sklearn.datasets.make_regression
+Synthetic data created directly in SQLite database tables.
 
 ## Hint
-When setting up the pipelines, the `StandardScaler` and `LinearRegression` steps can be named for easier access (e.g., `('scaler', StandardScaler())`, `('regressor', LinearRegression())`). To access coefficients from a trained pipeline, use `pipeline_with_interaction.named_steps['regressor'].coef_`. Ensure your feature names for the plot match the columns of `X_with_interaction`.
+Consider using a `JOIN` to combine customer and order information. For the `average_order_value_per_region`, a Common Table Expression (CTE) or a subquery can be helpful to first compute regional averages, which can then be joined or used in a `HAVING` clause for filtering.
