@@ -1,20 +1,18 @@
-# AI Daily Lab — 2025-12-22
+# AI Daily Lab — 2025-12-23
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 5 numerical features, and 1 conceptual 'high-cardinality' categorical feature. To create this categorical feature, generate a numerical feature with a large number of unique integer values (e.g., 50-100) and then convert it to string type, adding it to your feature DataFrame.
-2. Split the dataset into training and testing sets (e.g., 70/30 split) using `train_test_split`.
-3. Create two distinct `sklearn.pipeline.Pipeline` objects for preprocessing and modeling:
-    *   `pipeline_onehot_encoding`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `OneHotEncoder(handle_unknown='ignore')`.
-    *   `pipeline_feature_hashing`: Use `sklearn.compose.ColumnTransformer`. For the numerical features, apply `StandardScaler`. For the high-cardinality categorical feature, apply `FeatureHasher(n_features=15, input_type='string')` (you may adjust `n_features`).
-4. Both pipelines should then fit a `LogisticRegression` model (using `solver='liblinear'` and a `random_state` for reproducibility).
-5. Train both pipelines on the training data and evaluate their performance on the test set. Report the `accuracy_score` and `f1_score` for each pipeline, clearly stating which encoding strategy yielded which result.
-6. For both pipelines, calculate probability predictions on the test set. Create two plots using `sklearn.calibration.CalibrationDisplay.from_estimator` (one for each pipeline) to visualize model calibration. Arrange them side-by-side or clearly distinguish them with titles indicating the encoding method. Discuss briefly which model appears better calibrated based on the plots.
+1. Generate a synthetic dataset of 500-1000 short text documents (e.g., short sentences or phrases) belonging to 3 distinct categories. Ensure some keywords are strongly associated with each category.
+2. Split the dataset into training and testing sets (e.g., 70/30 split).
+3. Construct an `sklearn.pipeline.Pipeline` that first applies `sklearn.feature_extraction.text.TfidfVectorizer` to convert text into numerical features, and then trains an `sklearn.linear_model.LogisticRegression` model (set `random_state` and `solver='liblinear'` for reproducibility).
+4. Train the pipeline on the training data and make predictions on the test data.
+5. Print the `sklearn.metrics.classification_report` for the test set predictions.
+6. From the *trained* pipeline, extract the `TfidfVectorizer` and `LogisticRegression` steps. Identify and print the top 5 most important features (words) for *each class* based on the `LogisticRegression` coefficients (e.g., highest positive coefficients for each class). Briefly interpret what these features tell you about each class.
 
 ## Focus
-Feature Engineering (Categorical Hashing vs. One-Hot), ML Pipelines, Model Calibration
+ML pipelines, feature engineering (text), model evaluation, basic model interpretability
 
 ## Dataset
-Synthetic binary classification data with high-cardinality categorical feature.
+Synthetic text data (e.g., product reviews, news snippets) with 3 categories.
 
 ## Hint
-When using `FeatureHasher` within `ColumnTransformer`, ensure the selected column is treated as a single string per row (e.g., ensure it's a series of strings). `input_type='string'` on `FeatureHasher` will treat each item in the input sequence as a string. For `CalibrationDisplay`, you'll pass the fitted pipeline as the estimator, along with the test features and labels. Use `plt.figure()` and `ax` arguments to create multiple subplots or separate plots.
+When generating synthetic text, create a pool of category-specific keywords and generic words. To extract feature importance from a `Pipeline` for a `LogisticRegression` model, you'll need to access the `named_steps` of the trained pipeline to get the `TfidfVectorizer` and `LogisticRegression` objects. Use `TfidfVectorizer.get_feature_names_out()` and `LogisticRegression.coef_` (paying attention to its shape for multi-class classification) to map coefficients to words. For multi-class (OvR), `coef_[i]` represents coefficients for class `i` vs. all others.
