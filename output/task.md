@@ -1,18 +1,19 @@
-# AI Daily Lab — 2025-12-23
+# AI Daily Lab — 2025-12-24
 
 ## Task
-1. Generate a synthetic dataset of 500-1000 short text documents (e.g., short sentences or phrases) belonging to 3 distinct categories. Ensure some keywords are strongly associated with each category.
-2. Split the dataset into training and testing sets (e.g., 70/30 split).
-3. Construct an `sklearn.pipeline.Pipeline` that first applies `sklearn.feature_extraction.text.TfidfVectorizer` to convert text into numerical features, and then trains an `sklearn.linear_model.LogisticRegression` model (set `random_state` and `solver='liblinear'` for reproducibility).
-4. Train the pipeline on the training data and make predictions on the test data.
-5. Print the `sklearn.metrics.classification_report` for the test set predictions.
-6. From the *trained* pipeline, extract the `TfidfVectorizer` and `LogisticRegression` steps. Identify and print the top 5 most important features (words) for *each class* based on the `LogisticRegression` coefficients (e.g., highest positive coefficients for each class). Briefly interpret what these features tell you about each class.
+1. Generate a synthetic regression dataset: Create a pandas DataFrame `X` with 1000 samples and 3 numerical features (e.g., `feature_A`, `feature_B`, `feature_C`) using `np.random.rand()` for values between 0 and 1. Generate a target variable `y` such that `y = 2 * X['feature_A'] + 3 * (X['feature_B']**2) - X['feature_C'] + np.random.normal(0, 0.5, size=1000)`. 
+2. Visualize feature-target relationships: Use `seaborn.jointplot` or `seaborn.pairplot` to explore the relationships between each feature in `X` and the target `y`. Pay close attention to any non-linear patterns that might be present.
+3. Engineer a new feature: Based on your visual inspection from step 2, identify the feature that appears to have a non-linear relationship with `y` and create a new feature by squaring that specific feature (e.g., if `feature_B` shows a quadratic relationship, create `feature_B_squared`). Add this new feature to a copy of your DataFrame, named `X_engineered`.
+4. Build and compare pipelines: Create two `sklearn.pipeline.Pipeline` objects:
+    *   `pipeline_original`: Apply `StandardScaler` to the original DataFrame `X` and then fit a `LinearRegression` model.
+    *   `pipeline_engineered`: Apply `StandardScaler` to the `X_engineered` DataFrame (which includes original features plus the new squared feature) and then fit a `LinearRegression` model.
+5. Evaluate performance: Use `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric for both pipelines. Print the mean and standard deviation of the Mean Squared Error (MSE) for each, clearly indicating the performance difference achieved by the engineered feature (remember to convert `neg_mean_squared_error` to positive MSE values).
 
 ## Focus
-ML pipelines, feature engineering (text), model evaluation, basic model interpretability
+Feature Engineering, Data Visualization, ML Pipelines, Model Evaluation
 
 ## Dataset
-Synthetic text data (e.g., product reviews, news snippets) with 3 categories.
+Synthetic regression data with a hidden non-linear relationship designed to be discoverable via visualization.
 
 ## Hint
-When generating synthetic text, create a pool of category-specific keywords and generic words. To extract feature importance from a `Pipeline` for a `LogisticRegression` model, you'll need to access the `named_steps` of the trained pipeline to get the `TfidfVectorizer` and `LogisticRegression` objects. Use `TfidfVectorizer.get_feature_names_out()` and `LogisticRegression.coef_` (paying attention to its shape for multi-class classification) to map coefficients to words. For multi-class (OvR), `coef_[i]` represents coefficients for class `i` vs. all others.
+When using `seaborn.jointplot`, try different `kind` parameters (e.g., 'reg', 'kde', 'hex') to better visualize the relationship between individual features and the target. The goal is to visually identify which original feature, when transformed (squared in this case), might improve the model's performance by better capturing the underlying data generation process.
