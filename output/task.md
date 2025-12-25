@@ -1,19 +1,19 @@
-# AI Daily Lab — 2025-12-24
+# AI Daily Lab — 2025-12-25
 
 ## Task
-1. Generate a synthetic regression dataset: Create a pandas DataFrame `X` with 1000 samples and 3 numerical features (e.g., `feature_A`, `feature_B`, `feature_C`) using `np.random.rand()` for values between 0 and 1. Generate a target variable `y` such that `y = 2 * X['feature_A'] + 3 * (X['feature_B']**2) - X['feature_C'] + np.random.normal(0, 0.5, size=1000)`. 
-2. Visualize feature-target relationships: Use `seaborn.jointplot` or `seaborn.pairplot` to explore the relationships between each feature in `X` and the target `y`. Pay close attention to any non-linear patterns that might be present.
-3. Engineer a new feature: Based on your visual inspection from step 2, identify the feature that appears to have a non-linear relationship with `y` and create a new feature by squaring that specific feature (e.g., if `feature_B` shows a quadratic relationship, create `feature_B_squared`). Add this new feature to a copy of your DataFrame, named `X_engineered`.
-4. Build and compare pipelines: Create two `sklearn.pipeline.Pipeline` objects:
-    *   `pipeline_original`: Apply `StandardScaler` to the original DataFrame `X` and then fit a `LinearRegression` model.
-    *   `pipeline_engineered`: Apply `StandardScaler` to the `X_engineered` DataFrame (which includes original features plus the new squared feature) and then fit a `LinearRegression` model.
-5. Evaluate performance: Use `sklearn.model_selection.cross_val_score` with 5-fold cross-validation and `neg_mean_squared_error` as the scoring metric for both pipelines. Print the mean and standard deviation of the Mean Squared Error (MSE) for each, clearly indicating the performance difference achieved by the engineered feature (remember to convert `neg_mean_squared_error` to positive MSE values).
+1. Generate a synthetic dataset using `sklearn.datasets.make_blobs` with at least 1000 samples, 5 features, and 4 distinct centers (clusters). Set `random_state=42`.
+2. Apply `sklearn.preprocessing.StandardScaler` to the generated features.
+3. Implement the Elbow method and Silhouette analysis: For a range of K values (e.g., from 2 to 8), train `sklearn.cluster.KMeans` (set `random_state=42`). For each K, record the `inertia_` and the `silhouette_score` (using the scaled data and the predicted cluster labels).
+4. Plot both the `inertia_` values (Elbow curve) and `silhouette_score` values against the corresponding K values. Clearly label the axes and provide descriptive titles for both plots.
+5. Based on your plots, identify the optimal number of clusters (K). Train a final `KMeans` model using this optimal K on the scaled data.
+6. Reduce the dimensionality of the *scaled* features to 2 principal components using `sklearn.decomposition.PCA`. Transform the original scaled data and the centroids of your final `KMeans` model into this 2D PCA space.
+7. Visualize the final clusters in the 2D PCA space. Plot the data points, coloring them according to their assigned cluster labels from the final `KMeans` model. Overlay the transformed cluster centroids on the plot. Ensure axes are labeled and the plot has a clear title.
 
 ## Focus
-Feature Engineering, Data Visualization, ML Pipelines, Model Evaluation
+basic AI experimentation, model evaluation, data visualization
 
 ## Dataset
-Synthetic regression data with a hidden non-linear relationship designed to be discoverable via visualization.
+Synthetic data from `sklearn.datasets.make_blobs`
 
 ## Hint
-When using `seaborn.jointplot`, try different `kind` parameters (e.g., 'reg', 'kde', 'hex') to better visualize the relationship between individual features and the target. The goal is to visually identify which original feature, when transformed (squared in this case), might improve the model's performance by better capturing the underlying data generation process.
+Remember to transform your KMeans centroids into the PCA space to plot them correctly. For plotting, `matplotlib.pyplot.scatter` is useful. Use `plt.figure(figsize=...)` for better plot readability.
