@@ -1,23 +1,25 @@
-# AI Daily Lab — 2025-12-26
+# AI Daily Lab — 2025-12-27
 
 ## Task
-1. Generate a pandas DataFrame with 800 samples, including:
-    *   Three numerical features: `amount` (random positive floats, intentionally introduce some high outliers to simulate skewed transactions), `age` (random integers between 18-65), `duration_months` (random integers between 1-120).
-    *   One categorical feature: `region` (e.g., 'North', 'South', 'East', 'West' with varying proportions).
-    *   Ensure `amount` has a right-skewed distribution with some clear outliers (e.g., using `np.random.exponential` or adding a few large values).
-2. Calculate and display comprehensive descriptive statistics for the numerical features, grouped by the `region` categorical feature (e.g., mean, median, standard deviation, min, max, quartiles).
-3. Create a set of subplots (e.g., 1 row, 2 columns) to visualize the distribution of `amount` and `duration_months` across different `region` categories. Use `seaborn.boxplot` or `seaborn.violinplot` for these visualizations. Ensure plots have appropriate titles and labels.
-4. Focus on the `amount` feature. Apply a `log1p` transformation (i.e., `np.log1p(feature)`) to this feature to mitigate its skewness and outliers. Create another set of side-by-side subplots showing:
-    *   A histogram or Kernel Density Estimate (KDE) plot of the *original* `amount` distribution.
-    *   A histogram or KDE plot of the *log1p-transformed* `amount` distribution.
-    Clearly label titles to highlight the effect of the transformation.
-5. Compute the pairwise correlation matrix for all numerical features in the DataFrame (using the *log1p-transformed* `amount` for the correlation calculation). Visualize this matrix using a `seaborn.heatmap` with annotations, ensuring a clear title.
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 6 numerical features, and 2 classes (set `random_state` for reproducibility). Convert the features (`X`) and target (`y`) into a pandas DataFrame.
+2. Introduce missing values into the DataFrame:
+    *   For `feature_0`: Randomly replace approximately 15% of its values with `np.nan`.
+    *   For `feature_1`: Randomly replace approximately 10% of its values with `np.nan`.
+    *   For `feature_2`: Randomly replace approximately 5% of its values with `np.nan`.
+3. Create an `sklearn.pipeline.Pipeline` that first applies a `sklearn.compose.ColumnTransformer` for preprocessing and then fits a `sklearn.ensemble.RandomForestClassifier` (set `random_state` for reproducibility).
+    *   **Inside the `ColumnTransformer`**:
+        *   For `feature_0`: Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
+        *   For `feature_1`: Apply `KNeighborsImputer(n_neighbors=5)` followed by `StandardScaler`.
+        *   For `feature_2`: Apply `SimpleImputer(strategy='median')` followed by `StandardScaler`.
+        *   For the *remaining numerical features* (`feature_3` to `feature_5`): Apply `StandardScaler` directly (no imputation needed).
+4. Evaluate the complete pipeline's performance using 5-fold cross-validation (`sklearn.model_selection.cross_val_score`) with `accuracy` as the scoring metric.
+5. Report the mean accuracy and its standard deviation from the cross-validation.
 
 ## Focus
-pandas / numpy, data visualization, feature engineering
+Data Preprocessing, Missing Value Imputation, ML Pipelines, Cross-Validation
 
 ## Dataset
-Synthetic Pandas DataFrame (mix of numerical with skew/outliers and categorical features)
+Synthetic binary classification with intentionally introduced `np.nan` values in specific features.
 
 ## Hint
-For introducing outliers in `amount`, you could generate most values from a normal/exponential distribution and then add a small percentage of significantly larger values. For step 3, `sns.boxplot(x='region', y='amount', data=df)` in combination with `plt.subplot` or `plt.figure(figsize=...)` can be useful. For step 4, `sns.histplot` or `sns.kdeplot` are good choices. Remember to handle plotting with `matplotlib.pyplot` for subplots and figure sizing.
+When constructing the `ColumnTransformer`, remember to specify lists of column names or indices for each preprocessing step. For instance, `('mean_impute_scale', Pipeline([('imputer', SimpleImputer(strategy='mean')), ('scaler', StandardScaler())]), ['feature_0'])`. Ensure `KNeighborsImputer` is part of a sub-pipeline.
