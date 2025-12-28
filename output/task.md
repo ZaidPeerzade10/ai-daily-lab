@@ -1,25 +1,21 @@
-# AI Daily Lab — 2025-12-27
+# AI Daily Lab — 2025-12-28
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 6 numerical features, and 2 classes (set `random_state` for reproducibility). Convert the features (`X`) and target (`y`) into a pandas DataFrame.
-2. Introduce missing values into the DataFrame:
-    *   For `feature_0`: Randomly replace approximately 15% of its values with `np.nan`.
-    *   For `feature_1`: Randomly replace approximately 10% of its values with `np.nan`.
-    *   For `feature_2`: Randomly replace approximately 5% of its values with `np.nan`.
-3. Create an `sklearn.pipeline.Pipeline` that first applies a `sklearn.compose.ColumnTransformer` for preprocessing and then fits a `sklearn.ensemble.RandomForestClassifier` (set `random_state` for reproducibility).
-    *   **Inside the `ColumnTransformer`**:
-        *   For `feature_0`: Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
-        *   For `feature_1`: Apply `KNeighborsImputer(n_neighbors=5)` followed by `StandardScaler`.
-        *   For `feature_2`: Apply `SimpleImputer(strategy='median')` followed by `StandardScaler`.
-        *   For the *remaining numerical features* (`feature_3` to `feature_5`): Apply `StandardScaler` directly (no imputation needed).
-4. Evaluate the complete pipeline's performance using 5-fold cross-validation (`sklearn.model_selection.cross_val_score`) with `accuracy` as the scoring metric.
-5. Report the mean accuracy and its standard deviation from the cross-validation.
+1. Generate a 2D NumPy array (e.g., 64x64 pixels) initialized with zeros, representing a black grayscale image.
+2. Add several synthetic 'objects' to this image using NumPy slicing and broadcasting:
+    *   A bright square in the center (e.g., value 200).
+    *   A horizontal bright line (e.g., value 150).
+    *   A diagonal bright line (e.g., value 100) from top-left to bottom-right.
+3. Implement a basic 2D convolution function `manual_convolve2d(image, kernel)` using NumPy operations (avoid `scipy.signal.convolve2d` for this task). Your function should handle padding or border effects as you deem appropriate (e.g., 'same' padding).
+4. Define a 3x3 'edge detection' kernel (e.g., a simple Sobel or Laplacian approximation).
+5. Apply your `manual_convolve2d` function with the edge detection kernel to your generated image.
+6. Visualize the original synthetic image and the convolved (edge-detected) image side-by-side using `matplotlib.pyplot.imshow`. Use a 'gray' colormap and ensure both plots have appropriate titles (e.g., 'Original Image', 'Edge Detected Image').
 
 ## Focus
-Data Preprocessing, Missing Value Imputation, ML Pipelines, Cross-Validation
+numpy, data visualization, basic AI experimentation
 
 ## Dataset
-Synthetic binary classification with intentionally introduced `np.nan` values in specific features.
+Synthetic 2D NumPy array (image-like data)
 
 ## Hint
-When constructing the `ColumnTransformer`, remember to specify lists of column names or indices for each preprocessing step. For instance, `('mean_impute_scale', Pipeline([('imputer', SimpleImputer(strategy='mean')), ('scaler', StandardScaler())]), ['feature_0'])`. Ensure `KNeighborsImputer` is part of a sub-pipeline.
+For adding objects, utilize direct indexing and assignment like `img[row_slice, col_slice] = value`. For manual convolution, consider creating a padded version of the image to simplify boundary handling. The convolution operation involves iterating through the image, taking element-wise products with the kernel, and summing them. `matplotlib.pyplot.imshow(array, cmap='gray')` is your friend for visualization.
