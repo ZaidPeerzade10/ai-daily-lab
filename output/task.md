@@ -1,21 +1,19 @@
-# AI Daily Lab — 2025-12-28
+# AI Daily Lab — 2025-12-29
 
 ## Task
-1. Generate a 2D NumPy array (e.g., 64x64 pixels) initialized with zeros, representing a black grayscale image.
-2. Add several synthetic 'objects' to this image using NumPy slicing and broadcasting:
-    *   A bright square in the center (e.g., value 200).
-    *   A horizontal bright line (e.g., value 150).
-    *   A diagonal bright line (e.g., value 100) from top-left to bottom-right.
-3. Implement a basic 2D convolution function `manual_convolve2d(image, kernel)` using NumPy operations (avoid `scipy.signal.convolve2d` for this task). Your function should handle padding or border effects as you deem appropriate (e.g., 'same' padding).
-4. Define a 3x3 'edge detection' kernel (e.g., a simple Sobel or Laplacian approximation).
-5. Apply your `manual_convolve2d` function with the edge detection kernel to your generated image.
-6. Visualize the original synthetic image and the convolved (edge-detected) image side-by-side using `matplotlib.pyplot.imshow`. Use a 'gray' colormap and ensure both plots have appropriate titles (e.g., 'Original Image', 'Edge Detected Image').
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 5 informative features, and a significant class imbalance (e.g., `weights=[0.9, 0.1]` for 90% majority, 10% minority). Set `random_state` for reproducibility.
+2. Split the dataset into training and testing sets (e.g., 70/30 split).
+3. Define a custom scoring function using `sklearn.metrics.make_scorer` that prioritizes the F1-score for the *minority class* (class 1). Hint: use `average='binary'` and `pos_label=1` for `f1_score`.
+4. Construct an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to the features and then fits a `LogisticRegression` model (set `random_state`, `solver='liblinear'`).
+5. Define a hyperparameter distribution for `RandomizedSearchCV` to tune `LogisticRegression`'s `C` parameter (e.g., `scipy.stats.loguniform(1e-3, 1e2)`). Explore at least 10 different parameter settings (`n_iter=10`).
+6. Perform `RandomizedSearchCV` with the pipeline, the defined parameter distributions, 3-fold cross-validation, and your *custom minority class F1-scorer*.
+7. Report the best `C` value found, the corresponding best cross-validation score, and print a full `classification_report` for the test set using the best estimator found by `RandomizedSearchCV`.
 
 ## Focus
-numpy, data visualization, basic AI experimentation
+ML Pipelines, Hyperparameter Optimization, Custom Scoring, Imbalanced Classification
 
 ## Dataset
-Synthetic 2D NumPy array (image-like data)
+`sklearn.datasets.make_classification` (synthetic binary classification with imbalance)
 
 ## Hint
-For adding objects, utilize direct indexing and assignment like `img[row_slice, col_slice] = value`. For manual convolution, consider creating a padded version of the image to simplify boundary handling. The convolution operation involves iterating through the image, taking element-wise products with the kernel, and summing them. `matplotlib.pyplot.imshow(array, cmap='gray')` is your friend for visualization.
+Remember to import `make_scorer` from `sklearn.metrics` and `loguniform` from `scipy.stats`. When defining the custom scorer for F1-score, ensure you specify `average='binary'` and `pos_label=1` to correctly focus on the minority class's performance.
