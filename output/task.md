@@ -1,19 +1,23 @@
-# AI Daily Lab — 2025-12-29
+# AI Daily Lab — 2025-12-30
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 5 informative features, and a significant class imbalance (e.g., `weights=[0.9, 0.1]` for 90% majority, 10% minority). Set `random_state` for reproducibility.
-2. Split the dataset into training and testing sets (e.g., 70/30 split).
-3. Define a custom scoring function using `sklearn.metrics.make_scorer` that prioritizes the F1-score for the *minority class* (class 1). Hint: use `average='binary'` and `pos_label=1` for `f1_score`.
-4. Construct an `sklearn.pipeline.Pipeline` that first applies `StandardScaler` to the features and then fits a `LogisticRegression` model (set `random_state`, `solver='liblinear'`).
-5. Define a hyperparameter distribution for `RandomizedSearchCV` to tune `LogisticRegression`'s `C` parameter (e.g., `scipy.stats.loguniform(1e-3, 1e2)`). Explore at least 10 different parameter settings (`n_iter=10`).
-6. Perform `RandomizedSearchCV` with the pipeline, the defined parameter distributions, 3-fold cross-validation, and your *custom minority class F1-scorer*.
-7. Report the best `C` value found, the corresponding best cross-validation score, and print a full `classification_report` for the test set using the best estimator found by `RandomizedSearchCV`.
+1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 3 informative features. Modify the target `y` to introduce a non-linear relationship (e.g., `y_original + 2 * X[:, 0]**2 + np.random.normal(0, 0.5, size=1000)`).
+2. Split the dataset into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split`.
+3. Apply `sklearn.preprocessing.StandardScaler` to the features (`X`) on the training data and transform both training and testing sets.
+4. Build a simple sequential neural network model using `tensorflow.keras.models.Sequential`. The model should have:
+    *   An input layer matching the number of features.
+    *   At least one hidden `Dense` layer with `relu` activation (e.g., 32 units).
+    *   An output `Dense` layer with a single unit and linear activation.
+5. Compile the model using the `adam` optimizer and `mean_squared_error` loss.
+6. Train the model on the scaled training data for a suitable number of epochs (e.g., 50-100) and a batch size.
+7. Evaluate the trained model's performance on the scaled test set, reporting the Mean Squared Error (MSE).
+8. Visualize the model's predictions against the actual test target values using a scatter plot. Add a perfect prediction line (y=x) for comparison and label axes appropriately.
 
 ## Focus
-ML Pipelines, Hyperparameter Optimization, Custom Scoring, Imbalanced Classification
+basic AI experimentation
 
 ## Dataset
-`sklearn.datasets.make_classification` (synthetic binary classification with imbalance)
+Synthetic regression data with a non-linear component
 
 ## Hint
-Remember to import `make_scorer` from `sklearn.metrics` and `loguniform` from `scipy.stats`. When defining the custom scorer for F1-score, ensure you specify `average='binary'` and `pos_label=1` to correctly focus on the minority class's performance.
+Remember to import `tensorflow.keras` for model building and `sklearn.preprocessing.StandardScaler` for data preparation. The `y=x` line helps visually assess model bias and variance.
