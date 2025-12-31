@@ -1,23 +1,25 @@
-# AI Daily Lab — 2025-12-30
+# AI Daily Lab — 2025-12-31
 
 ## Task
-1. Generate a synthetic regression dataset using `sklearn.datasets.make_regression` with 1000 samples, 3 informative features. Modify the target `y` to introduce a non-linear relationship (e.g., `y_original + 2 * X[:, 0]**2 + np.random.normal(0, 0.5, size=1000)`).
-2. Split the dataset into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split`.
-3. Apply `sklearn.preprocessing.StandardScaler` to the features (`X`) on the training data and transform both training and testing sets.
-4. Build a simple sequential neural network model using `tensorflow.keras.models.Sequential`. The model should have:
-    *   An input layer matching the number of features.
-    *   At least one hidden `Dense` layer with `relu` activation (e.g., 32 units).
-    *   An output `Dense` layer with a single unit and linear activation.
-5. Compile the model using the `adam` optimizer and `mean_squared_error` loss.
-6. Train the model on the scaled training data for a suitable number of epochs (e.g., 50-100) and a batch size.
-7. Evaluate the trained model's performance on the scaled test set, reporting the Mean Squared Error (MSE).
-8. Visualize the model's predictions against the actual test target values using a scatter plot. Add a perfect prediction line (y=x) for comparison and label axes appropriately.
+1. Generate a synthetic transactional dataset using `pandas`:
+    *   Create a DataFrame named `transactions_df` with 800-1000 rows.
+    *   Columns should include:
+        *   `transaction_id` (unique integer IDs).
+        *   `customer_id` (e.g., 50-100 distinct customer IDs).
+        *   `transaction_date` (daily dates spanning 1-2 years, starting from '2022-01-01', ensuring multiple transactions per day/customer).
+        *   `amount` (random float values, e.g., between 10.0 and 500.0).
+        *   `product_category` (3-5 distinct string categories, e.g., 'Electronics', 'Books', 'Groceries', 'Clothing').
+    *   Sort the DataFrame by `customer_id` and then `transaction_date`.
+2. Create an in-memory SQLite database using `sqlite3` and load the `transactions_df` into a table named `transactions`.
+3. **SQL Analytics (Window Function 1 - Running Total)**: Write an SQL query to calculate the `running_total_amount` for each customer, ordered by their `transaction_date`. The query should return `transaction_id`, `customer_id`, `transaction_date`, `amount`, and the new `running_total_amount` column. Retrieve the results into a pandas DataFrame and display its head.
+4. **SQL Analytics (Window Function 2 - Rank within Group)**: Write a *separate* SQL query to rank transactions by `amount` in descending order *within each `product_category`*. The query should return `transaction_id`, `product_category`, `amount`, and the new `rank_in_category` column. Retrieve these results into another pandas DataFrame and display its head.
+5. Briefly describe what each window function achieves and how it's useful in analytical contexts.
 
 ## Focus
-basic AI experimentation
+SQL Analytics
 
 ## Dataset
-Synthetic regression data with a non-linear component
+Synthetic transactional data generated with pandas.
 
 ## Hint
-Remember to import `tensorflow.keras` for model building and `sklearn.preprocessing.StandardScaler` for data preparation. The `y=x` line helps visually assess model bias and variance.
+Remember to use `pandas.to_sql()` to transfer data to SQLite. For window functions, look into `SUM() OVER (PARTITION BY ... ORDER BY ...)` for running totals and `RANK() OVER (PARTITION BY ... ORDER BY ...) ` or `DENSE_RANK() OVER (...)` for ranking.
