@@ -1,25 +1,17 @@
-# AI Daily Lab — 2025-12-31
+# AI Daily Lab — 2026-01-01
 
 ## Task
-1. Generate a synthetic transactional dataset using `pandas`:
-    *   Create a DataFrame named `transactions_df` with 800-1000 rows.
-    *   Columns should include:
-        *   `transaction_id` (unique integer IDs).
-        *   `customer_id` (e.g., 50-100 distinct customer IDs).
-        *   `transaction_date` (daily dates spanning 1-2 years, starting from '2022-01-01', ensuring multiple transactions per day/customer).
-        *   `amount` (random float values, e.g., between 10.0 and 500.0).
-        *   `product_category` (3-5 distinct string categories, e.g., 'Electronics', 'Books', 'Groceries', 'Clothing').
-    *   Sort the DataFrame by `customer_id` and then `transaction_date`.
-2. Create an in-memory SQLite database using `sqlite3` and load the `transactions_df` into a table named `transactions`.
-3. **SQL Analytics (Window Function 1 - Running Total)**: Write an SQL query to calculate the `running_total_amount` for each customer, ordered by their `transaction_date`. The query should return `transaction_id`, `customer_id`, `transaction_date`, `amount`, and the new `running_total_amount` column. Retrieve the results into a pandas DataFrame and display its head.
-4. **SQL Analytics (Window Function 2 - Rank within Group)**: Write a *separate* SQL query to rank transactions by `amount` in descending order *within each `product_category`*. The query should return `transaction_id`, `product_category`, `amount`, and the new `rank_in_category` column. Retrieve these results into another pandas DataFrame and display its head.
-5. Briefly describe what each window function achieves and how it's useful in analytical contexts.
+1. **Generate Synthetic Time Series Data**: Create a pandas DataFrame `df` with 800 daily entries. It should have a `date` column (daily dates starting from '2023-01-01') and a `sales_amount` column. Populate `sales_amount` with a synthetic time series, for example, a combination of a linear trend, a yearly seasonality (using `np.sin`), and some random noise (using `np.random.normal`).
+2. **Feature Engineering - Lag Features**: Create two new features in the DataFrame: `sales_amount_lag_1` (representing the sales from the previous day) and `sales_amount_lag_7` (representing sales from 7 days prior) using pandas' `shift()` method.
+3. **Feature Engineering - Rolling Statistics**: Create two more new features: `rolling_mean_3_days` (a 3-day rolling mean of `sales_amount`) and `rolling_std_7_days` (a 7-day rolling standard deviation of `sales_amount`) using pandas' `rolling()` method. Ensure you handle potential `NaN` values from rolling operations (e.g., `min_periods=1` if you want to keep early rows, or simply let `NaN`s propagate and drop later).
+4. **Handle Missing Values and Prepare for Modeling**: After creating all engineered features, drop any rows that contain `NaN` values (which will typically appear at the beginning of the DataFrame due to `shift` and `rolling` operations). Then, define the target variable `y` as the `sales_amount` column of the processed DataFrame, and the features `X` as all the engineered lag and rolling features. Display the head of the final `X` and `y` DataFrames to show the prepared dataset.
+5. **Visualize Feature-Target Relationship**: Pick one of the engineered features (e.g., `sales_amount_lag_1`) and plot its relationship with the `sales_amount` target using a `seaborn.lineplot` or `seaborn.scatterplot`. Ensure the plot has appropriate labels and a title.
 
 ## Focus
-SQL Analytics
+pandas / numpy, feature engineering, data visualization
 
 ## Dataset
-Synthetic transactional data generated with pandas.
+Synthetic Time Series Data
 
 ## Hint
-Remember to use `pandas.to_sql()` to transfer data to SQLite. For window functions, look into `SUM() OVER (PARTITION BY ... ORDER BY ...)` for running totals and `RANK() OVER (PARTITION BY ... ORDER BY ...) ` or `DENSE_RANK() OVER (...)` for ranking.
+Use `pd.date_range` for dates. For synthetic series, combine `np.linspace` (trend), `np.sin` (seasonality), and `np.random.normal` (noise). Pandas `df['col'].shift(n)` and `df['col'].rolling(window=n).mean()` are key. Remember to drop rows with `NaN` before defining `X` and `y`.
