@@ -1,24 +1,24 @@
-# AI Daily Lab — 2026-01-03
+# AI Daily Lab — 2026-01-04
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 4 informative features, and 2 classes (set `random_state` for reproducibility).
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 5 informative features, and 2 classes (set `random_state` for reproducibility).
 2. Split the dataset into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
-3. Standardize the features using `sklearn.preprocessing.StandardScaler` on the training data, then transform both training and testing sets.
-4. Build a simple sequential neural network model using `tensorflow.keras.models.Sequential` for binary classification. The model should have:
-    *   An input layer matching the number of features.
-    *   One hidden `Dense` layer with `relu` activation (e.g., 16-32 units).
-    *   An output `Dense` layer with a single unit and `sigmoid` activation.
-5. Compile the model using the `adam` optimizer and `binary_crossentropy` loss.
-6. Train the model on the scaled training data for a suitable number of epochs (e.g., 30-50) and a batch size.
-7. Predict probabilities on the scaled test set. Convert these probabilities to binary class labels (0 or 1) using a threshold (e.g., 0.5).
-8. Print the `sklearn.metrics.classification_report` for the test set predictions.
-9. Generate and plot a confusion matrix using `sklearn.metrics.ConfusionMatrixDisplay.from_predictions` for the test set, clearly labeling the plot with a title (e.g., 'Confusion Matrix for Keras Binary Classifier').
+3. Define a function `create_keras_model(optimizer='adam', units=32)` that builds and compiles a `tensorflow.keras.models.Sequential` model. This model should have an input layer matching the number of features, one `Dense` hidden layer with `relu` activation (using `units` as a parameter), and a `Dense` output layer with `sigmoid` activation. Compile it with `binary_crossentropy` loss.
+4. Wrap this Keras model using `tensorflow.keras.wrappers.scikit_learn.KerasClassifier`.
+5. Construct an `sklearn.pipeline.Pipeline` that first applies `sklearn.preprocessing.StandardScaler` and then uses the wrapped `KerasClassifier`.
+6. Define a hyperparameter grid for `sklearn.model_selection.GridSearchCV` to tune the following parameters of the Keras model within the pipeline:
+    *   `kerasclassifier__batch_size` (e.g., `[32, 64]`)
+    *   `kerasclassifier__epochs` (e.g., `[10, 20]`)
+    *   `kerasclassifier__model__units` (e.g., `[16, 32]`)
+    *   `kerasclassifier__optimizer` (e.g., `['adam', 'rmsprop']`)
+7. Perform `GridSearchCV` with 3-fold cross-validation and `scoring='roc_auc'` on the training data. (Set `n_jobs=-1` for faster execution).
+8. Report the `best_params_` and `best_score_` from `GridSearchCV`. Then, using the `best_estimator_`, predict class labels on the test set and print the `sklearn.metrics.classification_report`.
 
 ## Focus
-Basic AI experimentation, Model Evaluation, Data Visualization
+basic AI experimentation
 
 ## Dataset
-Synthetic binary classification dataset
+Synthetic binary classification data using `sklearn.datasets.make_classification`.
 
 ## Hint
-For Keras, ensure your target `y` is in the correct shape (e.g., `y_train.reshape(-1, 1)`) and data types (`float32`) for training. Remember to use `model.predict` to get probabilities and then `(probabilities > 0.5).astype(int)` to convert them to class labels before generating the confusion matrix and classification report.
+Remember to use `tensorflow.keras.wrappers.scikit_learn.KerasClassifier` to integrate your Keras model with scikit-learn's `Pipeline` and `GridSearchCV`. When defining the `param_grid` for `GridSearchCV`, specify Keras model parameters that are arguments to your `create_keras_model` function with the `kerasclassifier__model__` prefix (e.g., `kerasclassifier__model__units`). Other parameters of `KerasClassifier` itself (like `batch_size`, `epochs`, `optimizer`) should use the `kerasclassifier__` prefix.
