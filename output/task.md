@@ -1,20 +1,21 @@
-# AI Daily Lab — 2026-01-08
+# AI Daily Lab — 2026-01-09
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with 1000 samples, 4 numerical features, and 2 classes (`random_state=42`). Convert `X` into a pandas DataFrame and add a categorical feature named `color` (e.g., 'red', 'blue', 'green', 'yellow' with random distribution, ensuring a good mix).
-2. Introduce missing values into the `color` feature by randomly replacing approximately 15% of its values with `np.nan`.
-3. Create an `sklearn.pipeline.Pipeline` that first applies a `sklearn.compose.ColumnTransformer` for preprocessing and then fits a `sklearn.linear_model.LogisticRegression` model (set `random_state=42`, `solver='liblinear'` for reproducibility).
-    *   **Inside the `ColumnTransformer`**:
-        *   For the numerical features: Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
-        *   For the `color` categorical feature: Apply `SimpleImputer(strategy='most_frequent')` followed by `OneHotEncoder(handle_unknown='ignore')`.
-4. Evaluate the complete pipeline's performance using 5-fold cross-validation (`sklearn.model_selection.cross_val_score`) with `accuracy` as the scoring metric.
-5. Report the mean accuracy and its standard deviation from the cross-validation.
+1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with at least 1000 samples, 10 features (e.g., `n_informative=5`, `n_redundant=3`, `n_repeated=2`), and 2 classes (set `random_state=42`).
+2. Split the dataset into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
+3. Create two distinct `sklearn.pipeline.Pipeline` objects:
+    *   `pipeline_no_fs`: Consisting of `StandardScaler` followed by `LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
+    *   `pipeline_with_fs`: Consisting of `StandardScaler`, then `sklearn.feature_selection.SelectKBest` (e.g., select `k=5` features using `score_func=sklearn.feature_selection.f_classif`), followed by `LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
+4. Train both `pipeline_no_fs` and `pipeline_with_fs` on the training data.
+5. Predict probabilities for the positive class (class 1) on the test set using both trained pipelines.
+6. Calculate and report the `sklearn.metrics.roc_auc_score` for both models on the test set.
+7. Briefly discuss the impact of including the feature selection step on the model's performance for this dataset, based on the reported ROC AUC scores.
 
 ## Focus
-ML pipelines, Feature Engineering (categorical imputation and encoding)
+Feature Selection in ML Pipelines, Model Comparison
 
 ## Dataset
-Synthetic classification data with mixed numerical and categorical features, including missing categorical values.
+Synthetic binary classification data (`sklearn.datasets.make_classification`)
 
 ## Hint
-Remember to define separate lists for numerical and categorical column names to pass to the `ColumnTransformer`. The `handle_unknown='ignore'` parameter in `OneHotEncoder` is good practice to prevent errors if unseen categories appear in the test set during cross-validation.
+Ensure `SelectKBest` is placed *after* `StandardScaler` in the pipeline for correct feature selection on scaled data. Remember to specify `k` (number of features to select) and `score_func` (e.g., `f_classif` for classification tasks) for `SelectKBest`.
