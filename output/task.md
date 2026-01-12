@@ -1,21 +1,18 @@
-# AI Daily Lab — 2026-01-11
+# AI Daily Lab — 2026-01-12
 
 ## Task
-1. Generate a synthetic binary classification dataset using `sklearn.datasets.make_classification` with 1000 samples, 10 informative features, and 2 classes (set `random_state=42`).
-2. Split the dataset into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
-3. Create two distinct `sklearn.pipeline.Pipeline` objects for classification:
-    *   `pipeline_no_pca`: Consisting of `StandardScaler` followed by `LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
-    *   `pipeline_with_pca`: Consisting of `StandardScaler`, then `sklearn.decomposition.PCA(n_components=2)`, followed by `LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
-4. Train both `pipeline_no_pca` and `pipeline_with_pca` on the training data.
-5. Predict probabilities for the positive class (class 1) on the test set using both trained pipelines. Calculate and report the `sklearn.metrics.roc_auc_score` for both models on the test set.
-6. **Visualize the transformed data**: Apply the `StandardScaler` and `PCA(n_components=2)` steps from `pipeline_with_pca` (using `.fit_transform()` on training and `.transform()` on testing data) to the *test set features*. Create a scatter plot of the two principal components, coloring the points by their actual class labels (`y_test`). Add appropriate titles and labels.
-7. Briefly discuss the impact of including PCA on the model's performance for this dataset and what the visualization reveals about the data separation.
+1. Generate a synthetic 2D dataset for clustering using `sklearn.datasets.make_blobs` with 1000 samples, 2 features, and 4 cluster centers. Set `random_state=42` for reproducibility.
+2. Apply `sklearn.preprocessing.StandardScaler` to the generated features.
+3. Perform K-Means clustering on the scaled data. Initialize `sklearn.cluster.KMeans` with `n_clusters=4` and `random_state=42` (set `n_init='auto'` or `n_init=10` to suppress warnings for older scikit-learn versions). Fit the model and obtain the cluster labels.
+4. Calculate and report the `sklearn.metrics.silhouette_score` using the scaled features and the obtained cluster labels.
+5. Create a scatter plot of the 2D features (either original or scaled), coloring each data point according to its assigned K-Means cluster. Ensure the plot has appropriate axis labels, a clear title (e.g., 'K-Means Clusters (Silhouette Score: X.XX)'), and a legend (if distinct colors are used).
+6. Briefly explain what the Silhouette Score measures and why it's a useful metric for evaluating clustering results, especially when true labels are not available.
 
 ## Focus
-ML Pipelines, Feature Engineering (Dimensionality Reduction), Model Evaluation, Data Visualization
+Unsupervised Learning (Clustering), Data Preprocessing, Model Evaluation, Data Visualization
 
 ## Dataset
-Synthetic binary classification data from `sklearn.datasets.make_classification` with 10 informative features.
+Synthetic 2D dataset with distinct clusters (`sklearn.datasets.make_blobs`)
 
 ## Hint
-For step 6, you will need to apply the `StandardScaler` and `PCA` transformations *separately* to `X_test` using the *fitted* transformers from `pipeline_with_pca` (e.g., `pipeline_with_pca.named_steps['standardscaler'].transform(X_test)` and then apply the PCA transformer to the scaled data). This will give you the 2 principal components for visualization.
+Remember to fit the `StandardScaler` on the data and then transform it. For K-Means, ensure you pass the scaled data. When plotting, you can use the original data for features but color them by the cluster labels derived from the scaled data.
