@@ -1,18 +1,21 @@
-# AI Daily Lab — 2026-01-12
+# AI Daily Lab — 2026-01-13
 
 ## Task
-1. Generate a synthetic 2D dataset for clustering using `sklearn.datasets.make_blobs` with 1000 samples, 2 features, and 4 cluster centers. Set `random_state=42` for reproducibility.
-2. Apply `sklearn.preprocessing.StandardScaler` to the generated features.
-3. Perform K-Means clustering on the scaled data. Initialize `sklearn.cluster.KMeans` with `n_clusters=4` and `random_state=42` (set `n_init='auto'` or `n_init=10` to suppress warnings for older scikit-learn versions). Fit the model and obtain the cluster labels.
-4. Calculate and report the `sklearn.metrics.silhouette_score` using the scaled features and the obtained cluster labels.
-5. Create a scatter plot of the 2D features (either original or scaled), coloring each data point according to its assigned K-Means cluster. Ensure the plot has appropriate axis labels, a clear title (e.g., 'K-Means Clusters (Silhouette Score: X.XX)'), and a legend (if distinct colors are used).
-6. Briefly explain what the Silhouette Score measures and why it's a useful metric for evaluating clustering results, especially when true labels are not available.
+1. **Generate Synthetic Time Series Data**: Create a pandas DataFrame `df` with 700-900 daily entries. It should have a `date` column (daily dates starting from '2022-01-01') and a `sales` column. Populate `sales` with a synthetic time series exhibiting a clear linear trend, a strong monthly seasonality (e.g., using `np.sin` or `np.cos` with a 30-day period), and some random noise.
+2. **Feature Engineering for Forecasting**: Create the following new features in the DataFrame:
+    *   `day_of_week`: Integer representing the day of the week (0=Monday, 6=Sunday).
+    *   `month`: Integer representing the month.
+    *   `day_of_year`: Integer representing the day of the year.
+    *   `sales_lag_7`: The `sales` value from 7 days prior.
+3. **Prepare Data and Chronological Split**: Drop any rows that contain `NaN` values resulting from lag feature creation. Define features `X` (all engineered features) and target `y` (`sales`). Then, split the data into training and testing sets *chronologically*, using the last 90 days of data for the test set. Ensure `X_train`, `X_test`, `y_train`, `y_test` are correctly defined.
+4. **Train and Evaluate a Regression Model**: Train an `sklearn.ensemble.RandomForestRegressor` (set `random_state=42`, `n_estimators=100`) on the training data. Predict `sales` for the test set. Calculate and report the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score` of the model on the test set.
+5. **Visualize the Forecast**: Create a single line plot showing the actual `sales` values for the test period and the model's predicted `sales` values for the same period. Label the axes, add a title like 'Sales Forecast vs. Actuals', and include a legend to distinguish between actual and predicted lines.
 
 ## Focus
-Unsupervised Learning (Clustering), Data Preprocessing, Model Evaluation, Data Visualization
+Time Series Forecasting, Feature Engineering, Chronological Data Splitting, Regression Model Evaluation and Visualization
 
 ## Dataset
-Synthetic 2D dataset with distinct clusters (`sklearn.datasets.make_blobs`)
+Synthetic time series data generated with pandas and numpy.
 
 ## Hint
-Remember to fit the `StandardScaler` on the data and then transform it. For K-Means, ensure you pass the scaled data. When plotting, you can use the original data for features but color them by the cluster labels derived from the scaled data.
+For the chronological split, you can simply slice your DataFrame using `iloc` based on the number of test samples needed from the end. Remember that `RandomForestRegressor` does not require explicit scaling for features like `StandardScaler` typically does for linear models.
