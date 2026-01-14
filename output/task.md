@@ -1,21 +1,22 @@
-# AI Daily Lab — 2026-01-13
+# AI Daily Lab — 2026-01-14
 
 ## Task
-1. **Generate Synthetic Time Series Data**: Create a pandas DataFrame `df` with 700-900 daily entries. It should have a `date` column (daily dates starting from '2022-01-01') and a `sales` column. Populate `sales` with a synthetic time series exhibiting a clear linear trend, a strong monthly seasonality (e.g., using `np.sin` or `np.cos` with a 30-day period), and some random noise.
-2. **Feature Engineering for Forecasting**: Create the following new features in the DataFrame:
-    *   `day_of_week`: Integer representing the day of the week (0=Monday, 6=Sunday).
-    *   `month`: Integer representing the month.
-    *   `day_of_year`: Integer representing the day of the year.
-    *   `sales_lag_7`: The `sales` value from 7 days prior.
-3. **Prepare Data and Chronological Split**: Drop any rows that contain `NaN` values resulting from lag feature creation. Define features `X` (all engineered features) and target `y` (`sales`). Then, split the data into training and testing sets *chronologically*, using the last 90 days of data for the test set. Ensure `X_train`, `X_test`, `y_train`, `y_test` are correctly defined.
-4. **Train and Evaluate a Regression Model**: Train an `sklearn.ensemble.RandomForestRegressor` (set `random_state=42`, `n_estimators=100`) on the training data. Predict `sales` for the test set. Calculate and report the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score` of the model on the test set.
-5. **Visualize the Forecast**: Create a single line plot showing the actual `sales` values for the test period and the model's predicted `sales` values for the same period. Label the axes, add a title like 'Sales Forecast vs. Actuals', and include a legend to distinguish between actual and predicted lines.
+1. Generate a synthetic imbalanced binary classification dataset using `sklearn.datasets.make_classification` with 1200 samples, 8 features, 2 classes, and `weights=[0.9, 0.1]` to create an imbalance. Set `random_state=42` for reproducibility.
+2. Split the dataset into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
+3. Create an `imblearn.pipeline.Pipeline` that includes the following steps:
+    *   `sklearn.preprocessing.StandardScaler`
+    *   `imblearn.over_sampling.SMOTE` (set `random_state=42`)
+    *   `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'`)
+4. Train the pipeline on the training data.
+5. Predict probabilities for the positive class (class 1) on the scaled test set. Then, convert these probabilities to binary class labels (0 or 1) using a threshold of 0.5.
+6. Calculate and print the `sklearn.metrics.classification_report` for the test set predictions.
+7. Plot the Precision-Recall curve for the model on the test set using `sklearn.metrics.PrecisionRecallDisplay.from_predictions`. Ensure the plot has a clear title, labels, and displays the average precision score.
 
 ## Focus
-Time Series Forecasting, Feature Engineering, Chronological Data Splitting, Regression Model Evaluation and Visualization
+ML pipelines / model evaluation (Imbalanced Classification)
 
 ## Dataset
-Synthetic time series data generated with pandas and numpy.
+Synthetic imbalanced binary classification data
 
 ## Hint
-For the chronological split, you can simply slice your DataFrame using `iloc` based on the number of test samples needed from the end. Remember that `RandomForestRegressor` does not require explicit scaling for features like `StandardScaler` typically does for linear models.
+Remember to import `SMOTE` from `imblearn.over_sampling` and `Pipeline` from `imblearn.pipeline`. `imblearn.pipeline.Pipeline` is essential for correctly applying resampling techniques like SMOTE only to the training data within each cross-validation fold or during fitting. For the Precision-Recall curve, `PrecisionRecallDisplay.from_predictions` is very convenient.
