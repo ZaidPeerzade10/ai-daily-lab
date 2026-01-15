@@ -1,22 +1,25 @@
-# AI Daily Lab — 2026-01-14
+# AI Daily Lab — 2026-01-15
 
 ## Task
-1. Generate a synthetic imbalanced binary classification dataset using `sklearn.datasets.make_classification` with 1200 samples, 8 features, 2 classes, and `weights=[0.9, 0.1]` to create an imbalance. Set `random_state=42` for reproducibility.
-2. Split the dataset into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
-3. Create an `imblearn.pipeline.Pipeline` that includes the following steps:
-    *   `sklearn.preprocessing.StandardScaler`
-    *   `imblearn.over_sampling.SMOTE` (set `random_state=42`)
-    *   `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'`)
-4. Train the pipeline on the training data.
-5. Predict probabilities for the positive class (class 1) on the scaled test set. Then, convert these probabilities to binary class labels (0 or 1) using a threshold of 0.5.
-6. Calculate and print the `sklearn.metrics.classification_report` for the test set predictions.
-7. Plot the Precision-Recall curve for the model on the test set using `sklearn.metrics.PrecisionRecallDisplay.from_predictions`. Ensure the plot has a clear title, labels, and displays the average precision score.
+1. **Generate Synthetic Transactional Data**: Create a pandas DataFrame named `transactions_df` with 1000-1200 rows. Columns should include:
+    *   `transaction_id` (unique integer IDs starting from 10000).
+    *   `customer_id` (e.g., 100-150 distinct customer IDs, formatted as 'C' followed by a number).
+    *   `transaction_date` (daily dates spanning 3 years, starting from '2021-01-01', ensuring multiple transactions per customer over time).
+    *   `amount` (random float values, e.g., between 20.0 and 1000.0).
+    *   Ensure the DataFrame is sorted by `customer_id` and then `transaction_date`.
+2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load the `transactions_df` into a table named `transactions`.
+3. **SQL Analytics (Advanced Window Functions - LAG/LEAD and Date Difference)**: Write a single SQL query that performs the following for *each customer*, ordered by their `transaction_date`:
+    *   Calculates `previous_transaction_amount`: The `amount` of the immediately preceding transaction.
+    *   Calculates `next_transaction_amount`: The `amount` of the immediately following transaction.
+    *   Calculates `days_since_prev_transaction`: The number of days between the current `transaction_date` and the `transaction_date` of the immediately preceding transaction. If it's the first transaction for a customer, this should be `NULL`.
+    *   The query should return `transaction_id`, `customer_id`, `transaction_date`, `amount`, `previous_transaction_amount`, `next_transaction_amount`, and `days_since_prev_transaction`.
+4. **Retrieve and Display**: Fetch the results into a pandas DataFrame. Display its head and briefly describe what the `LAG` and `LEAD` functions achieve in this context.
 
 ## Focus
-ML pipelines / model evaluation (Imbalanced Classification)
+SQL Analytics (LAG/LEAD Window Functions & Date Differences)
 
 ## Dataset
-Synthetic imbalanced binary classification data
+Synthetic transactional data
 
 ## Hint
-Remember to import `SMOTE` from `imblearn.over_sampling` and `Pipeline` from `imblearn.pipeline`. `imblearn.pipeline.Pipeline` is essential for correctly applying resampling techniques like SMOTE only to the training data within each cross-validation fold or during fitting. For the Precision-Recall curve, `PrecisionRecallDisplay.from_predictions` is very convenient.
+For calculating date differences in SQLite, consider using `julianday()` function, e.g., `julianday(current_date) - julianday(previous_date)`. Remember to use `PARTITION BY customer_id ORDER BY transaction_date` for window functions.
