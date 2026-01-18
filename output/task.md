@@ -1,32 +1,30 @@
-# AI Daily Lab — 2026-01-17
+# AI Daily Lab — 2026-01-18
 
 ## Task
-1. **Generate Synthetic Transactional Data**: Create a pandas DataFrame `transactions_df` with 800-1000 rows. Columns should include:
-    *   `transaction_id` (unique integers)
-    *   `transaction_date` (daily dates spanning 2-3 years, starting from '2022-01-01')
-    *   `product_category` (e.g., 4-5 distinct string categories like 'Electronics', 'Books', 'Groceries', 'Clothing', but with inconsistent casing and minor variations, e.g., 'electronics', 'Book', 'groceries item', 'clothes').
-    *   `description` (short text descriptions that sometimes contain keywords like 'discount', 'premium', 'sale').
-    *   `amount` (random float values between 10.0 and 500.0).
-    Ensure the DataFrame is sorted by `product_category` and then `transaction_date`.
-2. **Advanced Feature Engineering**: 
-    *   **Clean Categorical**: Create a new column `clean_category` by standardizing the `product_category` names (e.g., 'electronics', 'Electronics', 'ELEC' all map to 'Electronics').
-    *   **Datetime Features**: Extract `month` and `day_of_week` (integer 0-6) from `transaction_date`.
-    *   **Text Feature**: Create `is_discount` (binary: 1 if 'discount' or 'sale' is found in `description` case-insensitively, 0 otherwise).
-    *   **Grouped Lag Feature**: For each `clean_category`, calculate `lagged_amount_1d`, which is the `amount` from the previous day for that *specific category*. Fill `NaN` values (e.g., with 0, or by propagating the last valid observation forward and then filling remaining with 0 if needed for initial values).
-3. **Chronological Data Split**: Define features `X` (all engineered features created in step 2) and target `y` (the original `amount` column). Split the data chronologically, using the last 60 days of data for the test set. Ensure `X_train`, `X_test`, `y_train`, `y_test` are correctly defined.
-4. **ML Pipeline with ColumnTransformer**: Create an `sklearn.pipeline.Pipeline` that uses `sklearn.compose.ColumnTransformer` for preprocessing and `sklearn.ensemble.RandomForestRegressor` as the final estimator (set `random_state=42`, `n_estimators=100`).
-    *   **Inside the `ColumnTransformer`**:
-        *   For numerical features (`lagged_amount_1d`): Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
-        *   For categorical features (`clean_category`, `month`, `day_of_week`): Apply `OneHotEncoder(handle_unknown='ignore')`.
-        *   For the binary feature (`is_discount`): Use `Passthrough`.
-5. **Train, Predict, and Evaluate**: Train the pipeline on the training data (`X_train`, `y_train`). Predict `amount` for the test set (`X_test`). Calculate and report the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score`.
-6. **Visualize Forecast**: Create a single line plot showing the actual `amount` values for the test period and the model's predicted `amount` values for the same period. Label the axes, add a title like 'Actual vs. Predicted Amounts for Test Set', and include a legend.
+1. **Generate Synthetic Data (pandas/numpy)**: Create two pandas DataFrames:
+    *   `customer_profiles_df`: With 500 rows. Columns: `customer_id` (unique integers), `age` (random ints 18-70), `income` (random floats 20000-150000), `is_churn` (binary target, 0 or 1, with a slight imbalance, e.g., 80/20 split).
+    *   `transactions_df`: With 2000-3000 rows. Columns: `transaction_id` (unique integers), `customer_id` (randomly sampled from `customer_profiles_df` IDs, ensuring some customers have no transactions and others have many), `transaction_date` (random dates over the last 3 years), `amount` (random floats between 10.0 and 1000.0).
+2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load `customer_profiles_df` into a table named `customers` and `transactions_df` into `transactions`.
+3. **SQL Feature Engineering**: Write a single SQL query that performs the following:
+    *   **Joins** the `customers` and `transactions` tables.
+    *   **Aggregates** to calculate `total_spend`, `avg_spend_per_transaction`, and `num_transactions` for each customer.
+    *   **Ensures** that customers with no transactions are still included in the result, showing 0 for their aggregated spend/transaction counts.
+    *   Returns `customer_id`, `total_spend`, `avg_spend_per_transaction`, `num_transactions`.
+4. **Retrieve and Merge (pandas)**: Fetch the results of the SQL query into a pandas DataFrame. Then, merge this aggregated DataFrame with the original `customer_profiles_df` on `customer_id`.
+5. **Data Visualization**: Create a histogram or kernel density plot of `total_spend`, differentiated by `is_churn` (e.g., using `hue` in seaborn or `plt.hist` with different colors) to visually inspect the relationship.
+6. **ML Pipeline & Evaluation**: 
+    *   Define features `X` (`age`, `income`, `total_spend`, `avg_spend_per_transaction`, `num_transactions`) and target `y` (`is_churn`) from the merged DataFrame.
+    *   Split the data into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
+    *   Create an `sklearn.pipeline.Pipeline` consisting of `sklearn.preprocessing.StandardScaler` followed by `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
+    *   Train the pipeline on the training data. Predict probabilities for the positive class (class 1) on the test set.
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` for the test set predictions.
+    *   Generate and display an ROC curve for the model using `sklearn.metrics.RocCurveDisplay.from_estimator` with the trained pipeline and test data.
 
 ## Focus
-Feature Engineering (datetime, string, grouped lags), ML Pipelines (ColumnTransformer), Regression, Model Evaluation, Data Visualization
+SQL-driven Feature Engineering for ML, ML Pipelines, Model Evaluation, Data Visualization
 
 ## Dataset
-Synthetic transactional data with date, category, description, and amount.
+Synthetic customer profiles and transactional data
 
 ## Hint
-Pay close attention to sorting before calculating grouped lag features. For the ColumnTransformer, ensure you correctly map feature names to their respective transformers and remember that `amount` itself is the target `y`, not a feature in `X`.
+For the SQL query in step 3, consider using a `LEFT JOIN` to ensure all customers are included, even those without transactions. For aggregation, `IFNULL` or `COALESCE` can help handle `NULL` values gracefully when counting or summing. Remember to import `sqlite3` and `pandas` for data handling, and `sklearn` for ML components and evaluation, `matplotlib`/`seaborn` for visualization.
