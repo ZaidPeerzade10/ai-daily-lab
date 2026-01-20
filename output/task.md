@@ -1,38 +1,39 @@
-# AI Daily Lab — 2026-01-19
+# AI Daily Lab — 2026-01-20
 
 ## Task
-1. **Generate Synthetic Data**: Create two pandas DataFrames:
-    *   `users_df`: With 500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `region` (e.g., 'North', 'South', 'East', 'West' with random distribution), `plan_type` (e.g., 'Basic', 'Premium', 'Pro' with random distribution), `churn` (binary target, 0 or 1, with an approximate 20% churn rate).
-    *   `events_df`: With 3000-5000 rows. Columns: `event_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many events and a few have no events), `event_date` (random dates occurring *after* their respective `signup_date`), `event_type` (e.g., 'login', 'view_item', 'purchase', 'cancel_subscription' with varying frequencies).
-2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load `users_df` into a table named `users` and `events_df` into `events`.
-3. **SQL Feature Engineering (User Activity Aggregation)**: First, determine the `analysis_end_date` by finding the maximum `event_date` in your `events_df` (using pandas). Then, write a single SQL query that performs the following:
-    *   **Joins** `users` and `events` tables.
-    *   **Aggregates** user-level features: `total_events` (count of all events), `days_since_last_event` (number of days between the `analysis_end_date` and the user's latest `event_date`), `num_logins` (count of 'login' events), `num_purchases` (count of 'purchase' events).
-    *   **Ensures** that all users are included, even those with no events, showing appropriate default values (e.g., 0 for counts, `NULL` for `days_since_last_event` if no events).
-    *   The query should return `user_id`, `total_events`, `days_since_last_event`, `num_logins`, `num_purchases`.
-4. **Retrieve, Merge, and Final Data Prep (Pandas)**:
-    *   Fetch the SQL query results into a pandas DataFrame.
-    *   Merge this aggregated DataFrame with the original `users_df` on `user_id`.
-    *   Handle `NaN` values resulting from the SQL query: Fill `total_events`, `num_logins`, `num_purchases` with 0 for users with no events. For `days_since_last_event` (for users with no events), fill with a large sentinel value (e.g., `365 * 5` or 1825 to represent 5 years of inactivity).
-    *   Create a new feature `account_age_days`: Calculate the number of days between `signup_date` and the `analysis_end_date` (from step 3).
-    *   Define features `X` (all numerical + `region`, `plan_type`) and target `y` (`churn`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split`.
-5. **Data Visualization**: Create two separate violin plots (or box plots) to visualize the relationship between key engineered features and churn:
-    *   `days_since_last_event` vs `churn`.
-    *   `num_purchases` vs `churn`.
-    Ensure plots have appropriate labels and titles.
-6. **ML Pipeline & Evaluation**: 
+1. **Generate Synthetic Data**: Create three pandas DataFrames:
+    *   `products_df`: 100-150 rows. Columns: `product_id` (unique int), `category` (e.g., 'Electronics', 'books', 'Home Goods', 'CLOTHING', 'elec' with inconsistent casing/formats), `base_price` (random floats 50-500).
+    *   `orders_df`: 800-1000 rows. Columns: `order_id` (unique int), `product_id` (randomly sampled from `products_df` IDs), `order_date` (random dates over last 2 years), `quantity` (random int 1-5).
+    *   `reviews_df`: 700-900 rows. Columns: `review_id` (unique int), `order_id` (randomly sampled from `orders_df` IDs, ensuring some orders have no review and some products have multiple reviews), `rating` (random int 1-5, this will be our target), `review_text` (short text containing keywords like 'good', 'excellent', 'fast', 'slow', 'defective', 'broken' randomly, mixed with generic words).
+
+2. **Load into SQLite & SQL Analytics**: Create an in-memory SQLite database and load `products_df`, `orders_df`, and `reviews_df` into tables. Write a single SQL query that joins these three tables. For each review, calculate the `line_item_total` (`orders.quantity * products.base_price`). The query should return `review_id`, `rating`, `review_text`, `order_date`, `category`, and `line_item_total`.
+
+3. **Feature Engineering (Pandas)**: Fetch the SQL query results into a pandas DataFrame. Create the following new features:
+    *   `clean_category`: Standardize `category` names (e.g., 'Electronics', 'Books', 'Home Goods', 'Clothing') by converting to title case and handling variations (e.g., 'elec' -> 'Electronics'). (Hint: Use string methods like `.str.title()` and `.str.replace()` or a custom mapping function).
+    *   `has_positive_feedback`: Binary (1 if 'good' or 'excellent' (case-insensitive) is found in `review_text`, 0 otherwise).
+    *   `has_negative_feedback`: Binary (1 if 'slow', 'defective', or 'broken' (case-insensitive) is found in `review_text`, 0 otherwise).
+    *   `days_since_order`: Calculate the number of days between `order_date` and a fixed `analysis_date` (e.g., `max(order_date)` + 30 days from your generated data, after converting `order_date` to datetime objects).
+
+4. **Data Visualization**: Create two visualizations:
+    *   A histogram showing the distribution of the `rating` column.
+    *   A box plot or violin plot showing the distribution of `rating` for each `clean_category`.
+
+5. **ML Pipeline & Evaluation**: 
+    *   Define features `X` (`line_item_total`, `days_since_order`, `clean_category`, `has_positive_feedback`, `has_negative_feedback`) and target `y` (`rating`).
+    *   Split the data into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `total_events`, `days_since_last_event`, `num_logins`, `num_purchases`, `account_age_days`): Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
-        *   For categorical features (`region`, `plan_type`): Apply `OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
-    *   Train the pipeline on the training data. Predict on the test set.
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and `sklearn.metrics.accuracy_score` for the test set predictions.
+        *   Numerical features (`line_item_total`, `days_since_order`): Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
+        *   Categorical features (`clean_category`): Apply `OneHotEncoder(handle_unknown='ignore')`.
+        *   Binary features (`has_positive_feedback`, `has_negative_feedback`): Use `Passthrough`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestRegressor` (set `random_state=42`, `n_estimators=100`).
+    *   Train the pipeline on the training data. Predict `rating` for the test set.
+    *   Calculate and print the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score` for the test set predictions.
 
 ## Focus
-Comprehensive end-to-end user churn prediction: data synthesis, SQL-driven feature engineering (recency, frequency, event counts), data preparation, visualization, and a robust ML pipeline.
+Multi-Source Data Integration (SQL), Advanced Feature Engineering (Categorical Cleaning, Text Keywords, Datetime), Regression ML Pipeline, Data Visualization, Model Evaluation.
 
 ## Dataset
-Synthetic user profiles and event logs for a subscription service.
+Synthetic transactional data (products, orders, reviews) with messy categorical and text features.
 
 ## Hint
-For SQL date calculations in SQLite, use `JULIANDAY()` to convert dates to numbers for subtraction. Remember to dynamically pass your `analysis_end_date` (a Python variable) into your SQL query using f-strings or parameter binding. Use `COALESCE()` or `IFNULL()` in SQL for handling default values for users without events. For pandas NaN filling after SQL, ensure you use appropriate strategies (0 for counts, a suitable large sentinel value for days since last event for inactive users). When setting up the `ColumnTransformer`, explicitly list the column names for numerical and categorical features.
+When generating `review_text`, use `np.random.choice` with a list of common words and a few keywords. For `clean_category`, consider using `df['category'].str.lower().replace({'elec': 'electronics', 'books': 'books', ...}).str.title()` or a custom mapping function. Ensure `order_date` is parsed as datetime objects before calculating `days_since_order`. Remember to handle potential `NaN` values after merging/feature engineering, especially for `days_since_order` if any `order_date` is missing.
