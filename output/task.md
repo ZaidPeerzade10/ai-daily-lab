@@ -1,39 +1,46 @@
-# AI Daily Lab — 2026-01-20
+# AI Daily Lab — 2026-01-21
 
 ## Task
-1. **Generate Synthetic Data**: Create three pandas DataFrames:
-    *   `products_df`: 100-150 rows. Columns: `product_id` (unique int), `category` (e.g., 'Electronics', 'books', 'Home Goods', 'CLOTHING', 'elec' with inconsistent casing/formats), `base_price` (random floats 50-500).
-    *   `orders_df`: 800-1000 rows. Columns: `order_id` (unique int), `product_id` (randomly sampled from `products_df` IDs), `order_date` (random dates over last 2 years), `quantity` (random int 1-5).
-    *   `reviews_df`: 700-900 rows. Columns: `review_id` (unique int), `order_id` (randomly sampled from `orders_df` IDs, ensuring some orders have no review and some products have multiple reviews), `rating` (random int 1-5, this will be our target), `review_text` (short text containing keywords like 'good', 'excellent', 'fast', 'slow', 'defective', 'broken' randomly, mixed with generic words).
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `customers_df`: With 500 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West' with random distribution), `age` (random integers 18-70).
+    *   `transactions_df`: With 2000-3000 rows. Columns: `transaction_id` (unique integers), `customer_id` (randomly sampled from `customers_df` IDs, ensuring some customers have no transactions and others have many), `transaction_date` (random dates after their `signup_date`), `amount` (random floats between 10.0 and 1000.0).
 
-2. **Load into SQLite & SQL Analytics**: Create an in-memory SQLite database and load `products_df`, `orders_df`, and `reviews_df` into tables. Write a single SQL query that joins these three tables. For each review, calculate the `line_item_total` (`orders.quantity * products.base_price`). The query should return `review_id`, `rating`, `review_text`, `order_date`, `category`, and `line_item_total`.
+2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load `customers_df` into a table named `customers` and `transactions_df` into `transactions`.
 
-3. **Feature Engineering (Pandas)**: Fetch the SQL query results into a pandas DataFrame. Create the following new features:
-    *   `clean_category`: Standardize `category` names (e.g., 'Electronics', 'Books', 'Home Goods', 'Clothing') by converting to title case and handling variations (e.g., 'elec' -> 'Electronics'). (Hint: Use string methods like `.str.title()` and `.str.replace()` or a custom mapping function).
-    *   `has_positive_feedback`: Binary (1 if 'good' or 'excellent' (case-insensitive) is found in `review_text`, 0 otherwise).
-    *   `has_negative_feedback`: Binary (1 if 'slow', 'defective', or 'broken' (case-insensitive) is found in `review_text`, 0 otherwise).
-    *   `days_since_order`: Calculate the number of days between `order_date` and a fixed `analysis_date` (e.g., `max(order_date)` + 30 days from your generated data, after converting `order_date` to datetime objects).
+3. **SQL Feature Engineering (Customer Value)**: First, determine an `analysis_date` (e.g., the maximum `transaction_date` in `transactions_df` plus 30 days, using pandas). Then, write a single SQL query that performs the following for *each customer*:
+    *   **Joins** `customers` and `transactions` tables.
+    *   **Aggregates** to calculate `total_spend`, `num_transactions`, `avg_transaction_value` (total_spend / num_transactions).
+    *   Calculates `days_since_last_purchase`: The number of days between the `analysis_date` and the customer's `MAX(transaction_date)`.
+    *   Calculates `days_since_first_purchase`: The number of days between the `analysis_date` and the customer's `MIN(transaction_date)`.
+    *   **Ensures** that all customers are included in the result, even those with no transactions, showing 0 or NULL for aggregated values as appropriate.
+    *   The query should return `customer_id`, `region`, `age`, `signup_date`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`.
 
-4. **Data Visualization**: Create two visualizations:
-    *   A histogram showing the distribution of the `rating` column.
-    *   A box plot or violin plot showing the distribution of `rating` for each `clean_category`.
+4. **Retrieve, Merge, and Pandas Feature Engineering**: 
+    *   Fetch the SQL query results into a pandas DataFrame.
+    *   Calculate `account_age_days`: The number of days between `signup_date` and the `analysis_date` (from step 3).
+    *   Handle `NaN` values resulting from customers with no transactions:
+        *   Fill `total_spend`, `num_transactions`, `avg_transaction_value` with 0.
+        *   For `days_since_last_purchase` and `days_since_first_purchase` (for customers with no transactions), fill with a large sentinel value, e.g., `account_age_days` + 30 days (or 5 years in days).
+    *   Define features `X` (`age`, `region`, `account_age_days`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`) and target `y` (`total_spend`).
+    *   Split the data into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
 
-5. **ML Pipeline & Evaluation**: 
-    *   Define features `X` (`line_item_total`, `days_since_order`, `clean_category`, `has_positive_feedback`, `has_negative_feedback`) and target `y` (`rating`).
-    *   Split the data into training and testing sets (e.g., 80/20 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+5. **Data Visualization**: Create two visualizations:
+    *   A histogram showing the distribution of the target variable `total_spend`.
+    *   A box plot or violin plot showing the distribution of `total_spend` for each `region`.
+
+6. **ML Pipeline & Evaluation**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   Numerical features (`line_item_total`, `days_since_order`): Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
-        *   Categorical features (`clean_category`): Apply `OneHotEncoder(handle_unknown='ignore')`.
-        *   Binary features (`has_positive_feedback`, `has_negative_feedback`): Use `Passthrough`.
+        *   For numerical features (e.g., `age`, `account_age_days`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`): Apply `StandardScaler`.
+        *   For categorical features (`region`): Apply `OneHotEncoder(handle_unknown='ignore')`.
     *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestRegressor` (set `random_state=42`, `n_estimators=100`).
-    *   Train the pipeline on the training data. Predict `rating` for the test set.
+    *   Train the pipeline on the training data (`X_train`, `y_train`). Predict `total_spend` for the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score` for the test set predictions.
 
 ## Focus
-Multi-Source Data Integration (SQL), Advanced Feature Engineering (Categorical Cleaning, Text Keywords, Datetime), Regression ML Pipeline, Data Visualization, Model Evaluation.
+Customer Value Prediction (Regression) using SQL-driven RFM-like Feature Engineering and ML Pipelines.
 
 ## Dataset
-Synthetic transactional data (products, orders, reviews) with messy categorical and text features.
+Synthetic customer demographic and transactional data.
 
 ## Hint
-When generating `review_text`, use `np.random.choice` with a list of common words and a few keywords. For `clean_category`, consider using `df['category'].str.lower().replace({'elec': 'electronics', 'books': 'books', ...}).str.title()` or a custom mapping function. Ensure `order_date` is parsed as datetime objects before calculating `days_since_order`. Remember to handle potential `NaN` values after merging/feature engineering, especially for `days_since_order` if any `order_date` is missing.
+Pay close attention to handling dates (converting to datetime, calculating differences) and managing `NULL`/`NaN` values from `LEFT JOIN` operations in SQL and during Pandas feature engineering, especially for customers with no transactions. For `analysis_date`, calculate it based on the maximum transaction date in your synthetic data to simulate a realistic cut-off point.
