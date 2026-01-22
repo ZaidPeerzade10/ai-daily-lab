@@ -1,46 +1,42 @@
-# AI Daily Lab — 2026-01-21
+# AI Daily Lab — 2026-01-22
 
 ## Task
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `customers_df`: With 500 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West' with random distribution), `age` (random integers 18-70).
-    *   `transactions_df`: With 2000-3000 rows. Columns: `transaction_id` (unique integers), `customer_id` (randomly sampled from `customers_df` IDs, ensuring some customers have no transactions and others have many), `transaction_date` (random dates after their `signup_date`), `amount` (random floats between 10.0 and 1000.0).
-
-2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load `customers_df` into a table named `customers` and `transactions_df` into `transactions`.
-
-3. **SQL Feature Engineering (Customer Value)**: First, determine an `analysis_date` (e.g., the maximum `transaction_date` in `transactions_df` plus 30 days, using pandas). Then, write a single SQL query that performs the following for *each customer*:
-    *   **Joins** `customers` and `transactions` tables.
-    *   **Aggregates** to calculate `total_spend`, `num_transactions`, `avg_transaction_value` (total_spend / num_transactions).
-    *   Calculates `days_since_last_purchase`: The number of days between the `analysis_date` and the customer's `MAX(transaction_date)`.
-    *   Calculates `days_since_first_purchase`: The number of days between the `analysis_date` and the customer's `MIN(transaction_date)`.
-    *   **Ensures** that all customers are included in the result, even those with no transactions, showing 0 or NULL for aggregated values as appropriate.
-    *   The query should return `customer_id`, `region`, `age`, `signup_date`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`.
-
+    *   `users_df`: With 500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `country` (e.g., 'USA', 'Canada', 'UK', 'Australia' with random distribution), `device_type` (e.g., 'Mobile', 'Web', 'Desktop'), `engagement_level` (binary target, 0 or 1, with an approximate 70/30 split for class 0/1).
+    *   `activities_df`: With 3000-5000 rows. Columns: `activity_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many activities and a few have no activities), `activity_date` (random dates occurring *after* their respective `signup_date`), `activity_type` (e.g., 'login', 'logout', 'view_profile', 'send_message', 'post_content', 'like_content' with varying frequencies).
+2. **Load into SQLite**: Create an in-memory SQLite database using `sqlite3` and load `users_df` into a table named `users` and `activities_df` into `activities`.
+3. **SQL Feature Engineering (User Activity Aggregation)**: First, determine an `analysis_date` by finding the maximum `activity_date` in your `activities_df` (using pandas) and adding 30 days to it. Then, write a single SQL query that performs the following for *each user*:
+    *   **Joins** `users` and `activities` tables.
+    *   **Aggregates** user-level features: `total_activities` (count of all activities), `num_logins` (count of 'login' events), `num_messages_sent` (count of 'send_message' events), `num_content_posts` (count of 'post_content' events).
+    *   Calculates `first_activity_date` and `last_activity_date` for each user.
+    *   **Ensures** that all users are included, even those with no activities, showing appropriate default values (e.g., 0 for counts, `NULL` for dates).
+    *   The query should return `user_id`, `country`, `device_type`, `signup_date`, `total_activities`, `num_logins`, `num_messages_sent`, `num_content_posts`, `first_activity_date`, `last_activity_date`.
 4. **Retrieve, Merge, and Pandas Feature Engineering**: 
     *   Fetch the SQL query results into a pandas DataFrame.
-    *   Calculate `account_age_days`: The number of days between `signup_date` and the `analysis_date` (from step 3).
-    *   Handle `NaN` values resulting from customers with no transactions:
-        *   Fill `total_spend`, `num_transactions`, `avg_transaction_value` with 0.
-        *   For `days_since_last_purchase` and `days_since_first_purchase` (for customers with no transactions), fill with a large sentinel value, e.g., `account_age_days` + 30 days (or 5 years in days).
-    *   Define features `X` (`age`, `region`, `account_age_days`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`) and target `y` (`total_spend`).
-    *   Split the data into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
-
-5. **Data Visualization**: Create two visualizations:
-    *   A histogram showing the distribution of the target variable `total_spend`.
-    *   A box plot or violin plot showing the distribution of `total_spend` for each `region`.
-
+    *   Merge this aggregated DataFrame with the original `users_df` on `user_id`.
+    *   Handle `NaN` values resulting from the SQL query: Fill `total_activities`, `num_logins`, `num_messages_sent`, `num_content_posts` with 0 for users with no activities.
+    *   Convert all date columns to datetime objects. Calculate the following new features using the `analysis_date` from step 3:
+        *   `account_age_days`: Days between `signup_date` and `analysis_date`.
+        *   `days_since_last_activity`: Days between `last_activity_date` and `analysis_date`. For users with no activities, fill with a large sentinel value (e.g., `account_age_days` + 30).
+        *   `days_since_first_activity`: Days between `first_activity_date` and `analysis_date`. For users with no activities, fill with a large sentinel value (e.g., `account_age_days` + 30).
+    *   Define features `X` (`country`, `device_type`, `account_age_days`, `days_since_last_activity`, `days_since_first_activity`, `total_activities`, `num_logins`, `num_messages_sent`, `num_content_posts`) and target `y` (`engagement_level`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+5. **Data Visualization**: Create two separate plots to visually inspect relationships with `engagement_level`:
+    *   A histogram showing the distribution of `total_activities` for each `engagement_level` (e.g., using `hue` in seaborn).
+    *   A bar plot or count plot showing the `engagement_level` counts across different `device_type`s.
+    Ensure plots have appropriate labels and titles.
 6. **ML Pipeline & Evaluation**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `age`, `account_age_days`, `total_spend`, `num_transactions`, `avg_transaction_value`, `days_since_last_purchase`, `days_since_first_purchase`): Apply `StandardScaler`.
-        *   For categorical features (`region`): Apply `OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestRegressor` (set `random_state=42`, `n_estimators=100`).
-    *   Train the pipeline on the training data (`X_train`, `y_train`). Predict `total_spend` for the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.mean_absolute_error` (MAE) and `sklearn.metrics.r2_score` for the test set predictions.
+        *   For numerical features (e.g., `account_age_days`, `days_since_last_activity`, `days_since_first_activity`, `total_activities`, etc.): Apply `SimpleImputer(strategy='mean')` followed by `StandardScaler`.
+        *   For categorical features (`country`, `device_type`): Apply `OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
+    *   Train the pipeline on the training data. Predict probabilities for the positive class (class 1) on the test set.
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Customer Value Prediction (Regression) using SQL-driven RFM-like Feature Engineering and ML Pipelines.
+Advanced SQL Feature Engineering from multiple tables, Pandas for datetime features and data wrangling, ML Pipeline for binary classification with categorical/numerical data, and model evaluation.
 
 ## Dataset
-Synthetic customer demographic and transactional data.
+Synthetic User Profiles and Activity Logs
 
 ## Hint
-Pay close attention to handling dates (converting to datetime, calculating differences) and managing `NULL`/`NaN` values from `LEFT JOIN` operations in SQL and during Pandas feature engineering, especially for customers with no transactions. For `analysis_date`, calculate it based on the maximum transaction date in your synthetic data to simulate a realistic cut-off point.
+Remember to use `LEFT JOIN` in your SQL query to ensure all users are included, even those with no activities. For date differences in pandas, subtract `datetime` objects to get `Timedelta` and then extract days. Pay attention to handling `NaN` values, especially for users with no activities, by filling them appropriately before passing to the ML pipeline.
