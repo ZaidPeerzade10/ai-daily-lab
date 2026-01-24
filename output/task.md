@@ -1,44 +1,45 @@
-# AI Daily Lab — 2026-01-23
+# AI Daily Lab — 2026-01-24
 
 ## Task
 1. **Generate Synthetic Data**: Create two pandas DataFrames:
-    *   `products_df`: 100-150 rows. Columns: `product_id` (unique int), `category` (e.g., 'Electronics', 'Books', 'Home Goods', 'Clothing' with varying proportions), `price` (random floats between 50.0 and 500.0).
-    *   `reviews_df`: 800-1200 rows. Columns: `review_id` (unique int), `product_id` (randomly sampled from `products_df` IDs, ensuring multiple reviews per product), `review_text` (short text containing keywords like 'good', 'great', 'excellent', 'bad', 'terrible', 'slow', and '!' randomly, mixed with generic words), `rating` (random integers 1-5, biased towards 4-5).
+    *   `users_df`: With 500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `country` (e.g., 'USA', 'Canada', 'UK', 'Germany' with random distribution), `subscription_type` (e.g., 'Free', 'Basic', 'Premium').
+    *   `activities_df`: With 3000-5000 rows. Columns: `activity_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `activity_date` (random dates *after* `signup_date`), `activity_type` (e.g., 'login', 'view_item', 'post_comment', 'upgrade_plan' with varying frequencies).
 
-2. **Load into SQLite & SQL Analytics**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` into a table named `products` and `reviews_df` into a table named `reviews`. Write a single SQL query that performs the following:
-    *   **Joins** `reviews` and `products` tables on `product_id`.
-    *   **Calculates `avg_product_rating`**: For each `review_id`, include the average `rating` for its corresponding `product_id` across *all* reviews for that product (using a window function `AVG(rating) OVER (PARTITION BY product_id)`).
-    *   The query should return `review_id`, `review_text`, `rating`, `category`, `price`, and `avg_product_rating`.
+2. **Load into SQLite & SQL Analytics**: Create an in-memory SQLite database. Load `users_df` into a table named `users` and `activities_df` into a table named `activities`. Determine an `analysis_date` (e.g., `max(activity_date)` from `activities_df` + 30 days). Write a single SQL query that performs the following for *each user*:
+    *   **Joins** `users` and `activities` tables.
+    *   **Aggregates** user-level features: `total_activities` (count of all activities), `num_logins` (count of 'login' events), `num_comments_posted` (count of 'post_comment' events).
+    *   Calculates `days_since_last_activity`: Days between `analysis_date` (passed as a parameter or calculated within SQL if possible via date functions) and `MAX(activity_date)`.
+    *   **Ensures** all users are included, showing 0 for counts and `NULL` for `days_since_last_activity` if no activities.
+    *   Returns `user_id`, `country`, `subscription_type`, `signup_date`, `total_activities`, `num_logins`, `num_comments_posted`, `days_since_last_activity`.
 
-3. **Pandas Feature Engineering & Target Creation**: Fetch the SQL query results into a pandas DataFrame. Create the following new features:
-    *   **Target Variable `sentiment`**: Create a binary target column `sentiment` where 1 if `rating >= 4` (positive) and 0 if `rating < 4` (negative). Drop the original `rating` column.
-    *   **Text Features from `review_text`**:
-        *   `review_length`: The length of the `review_text` string.
-        *   `has_exclamation`: Binary (1 if '!' is found in `review_text`, 0 otherwise).
-        *   `has_positive_word`: Binary (1 if 'good', 'great', or 'excellent' (case-insensitive) is found, 0 otherwise).
-        *   `has_negative_word`: Binary (1 if 'bad', 'terrible', or 'slow' (case-insensitive) is found, 0 otherwise).
+3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame. 
+    *   Merge with `users_df` (if necessary, to ensure all original user features like `country`, `subscription_type` are present even for users with no activities) using a left join on `user_id`.
+    *   Handle `NaN` values: Fill `total_activities`, `num_logins`, `num_comments_posted` with 0. For `days_since_last_activity` (for users with no activities), fill with a large sentinel value (e.g., `365 * 5` or 1825 days).
+    *   Calculate `account_age_days`: Days between `signup_date` and the `analysis_date` (from step 2).
+    *   **Create the multi-class target `activity_segment`**: Based on `total_activities` and `days_since_last_activity`. First, calculate quantiles for `total_activities`. Then, define segments:
+        *   'High_Activity': `total_activities` is in the top 33% *and* `days_since_last_activity` < 30 days.
+        *   'Medium_Activity': `total_activities` is in the middle 34-66% *or* `days_since_last_activity` between 30 and 90 days (excluding those already classified as 'High_Activity').
+        *   'Low_Activity': All remaining users (including those with 0 activities or `days_since_last_activity` >= 90 days).
+    *   Define features `X` (numerical: `account_age_days`, `total_activities`, `num_logins`, `num_comments_posted`, `days_since_last_activity`; categorical: `country`, `subscription_type`) and target `y` (`activity_segment`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
 
-4. **Data Visualization**: Create two visualizations:
-    *   A box plot showing the distribution of `price` for each `sentiment` (0 and 1).
-    *   A bar plot (or count plot) showing the distribution of `sentiment` across different `category` values.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `activity_segment`:
+    *   A violin plot or box plot showing the distribution of `days_since_last_activity` for each `activity_segment`.
+    *   A bar plot or count plot showing the distribution of `activity_segment` across different `subscription_type`s.
     Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation**: 
-    *   Define features `X` (all numerical, categorical, and binary text features created) and target `y` (`sentiment`) from the engineered DataFrame.
-    *   Split the data into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+5. **ML Pipeline & Evaluation (Multi-Class)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   For numerical features (`price`, `avg_product_rating`, `review_length`, `has_exclamation`): Apply `sklearn.preprocessing.StandardScaler`.
-        *   For the categorical feature (`category`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-        *   For binary features (`has_positive_word`, `has_negative_word`): Use `Passthrough`.
-    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
-    *   Train the pipeline on the training data (`X_train`, `y_train`). Predict `sentiment` for the test set (`X_test`).
+        *   For numerical features: Apply `StandardScaler`.
+        *   For categorical features: Apply `OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator should be `sklearn.ensemble.RandomForestClassifier` (set `random_state=42`, `n_estimators=100`, `class_weight='balanced'` for potential class imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `activity_segment` for `X_test`.
     *   Calculate and print the `sklearn.metrics.accuracy_score` and `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-SQL analytics, pandas feature engineering (text-based & derived), ML pipelines, classification, data visualization
+SQL for complex user activity features, deriving a multi-class target from aggregated data, advanced Pandas feature engineering, ColumnTransformer with RandomForestClassifier for multi-class prediction, and insightful visualizations.
 
 ## Dataset
-Synthetic product and review data generated with pandas/numpy.
+Synthetic customer profiles and activity logs across different subscription types and countries.
 
 ## Hint
-Pay close attention to using the `AVG() OVER (PARTITION BY ...)` window function in SQL. For pandas text features, use `.str.contains()` with `case=False` for case-insensitive matching.
+When creating the `activity_segment` target, use `pd.qcut` or `df['col'].quantile()` to define activity tiers based on `total_activities`. Remember to handle users with no activities (NaNs) correctly after SQL aggregation and for the `days_since_last_activity` sentinel value. For `RandomForestClassifier` and multi-class problems, `class_weight='balanced'` can be helpful if segments are unevenly distributed.
