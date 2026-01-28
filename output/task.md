@@ -1,42 +1,47 @@
-# AI Daily Lab — 2026-01-27
+# AI Daily Lab — 2026-01-28
 
 ## Task
-1. **Generate Synthetic A/B Test Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `test_group` (string: 'Control', 'Treatment', with an even split), `device_type` (string: 'Mobile', 'Desktop', 'Tablet').
-    *   `activities_df`: With 3000-5000 rows. Columns: `activity_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many activities and a few have no activities), `activity_date` (random dates occurring *after* their respective `signup_date`), `activity_type` (string: 'page_view', 'add_to_cart', 'purchase', 'login' with varying frequencies).
-    *   **Crucially, simulate an A/B test effect**: Make the 'Treatment' group have a slightly higher proportion of 'purchase' activities than the 'Control' group.
+1. **Generate Synthetic Data**: Create three pandas DataFrames:
+    *   `users_df`: 500-700 rows. Columns: `user_id` (unique int), `age` (random ints 18-70), `region` (e.g., 'North', 'South', 'East', 'West'), `signup_date` (random dates over last 5 years).
+    *   `products_df`: 100-150 rows. Columns: `product_id` (unique int), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'HomeGoods'), `price` (random floats 50-500).
+    *   `interactions_df`: 3000-5000 rows. Columns: `interaction_id` (unique int), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates *after* respective `signup_date`), `interaction_type` (e.g., 'view', 'add_to_cart', 'purchase'), `feedback_text` (short text containing keywords like 'good', 'excellent', 'slow', 'broken', 'loved it', 'ok' randomly, mixed with generic words). Ensure users show a preference for certain categories.
 
-2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` into a table named `users` and `activities_df` into a table named `activities`. Determine an `analysis_date` (e.g., the maximum `activity_date` in `activities_df` + 30 days, using pandas).
-    Write a single SQL query that performs the following for *each user*:
-    *   **Joins** `users` and `activities` tables.
-    *   **Aggregates** user-level features: `total_activities` (count of all activities), `num_logins` (count of 'login' events), `has_purchased` (binary: 1 if any 'purchase' event, 0 otherwise), `first_activity_date`, `last_activity_date`.
-    *   **Ensures** that all users are included (even those with no activities), showing appropriate default values (e.g., 0 for counts, `NULL` for dates).
-    *   The query should return `user_id`, `signup_date`, `test_group`, `device_type`, `total_activities`, `num_logins`, `has_purchased`, `first_activity_date`, `last_activity_date`.
+2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database. Load `users_df`, `products_df`, and `interactions_df` into tables. Determine an `analysis_date` (e.g., `max(interaction_date)` from `interactions_df` + 30 days). Write a single SQL query that performs the following for *each user*:
+    *   **Joins** `users`, `products`, and `interactions` tables.
+    *   **Aggregates** user-level features:
+        *   `total_interactions` (count of all interactions).
+        *   `total_purchases` (count of 'purchase' interactions).
+        *   `num_electronics_purchases`, `num_books_purchases`, etc. (count of 'purchase' interactions for each `category`).
+        *   `concatenated_feedback`: A single string containing all `feedback_text` provided by the user (concatenate with a space).
+        *   `days_since_last_interaction`: Days between `analysis_date` and `MAX(interaction_date)`.
+    *   **Ensures** all users are included, showing 0 for counts, empty string for `concatenated_feedback`, and `NULL` for `days_since_last_interaction` if no interactions.
+    *   Returns `user_id`, `age`, `region`, `signup_date`, `total_interactions`, `total_purchases`, `num_electronics_purchases`, `num_books_purchases`, `num_clothing_purchases`, `num_homegoods_purchases`, `concatenated_feedback`, `days_since_last_interaction`.
 
-3. **Pandas Feature Engineering & Target Creation**: Fetch the SQL query results into a pandas DataFrame. 
-    *   Handle `NaN` values: Fill `total_activities`, `num_logins`, `has_purchased` with 0 for users with no activities. For `first_activity_date` and `last_activity_date` (for users with no activities), fill with their `signup_date`.
-    *   Convert all date columns to datetime objects. Calculate the following new features using the `analysis_date` from step 2:
-        *   `account_age_days`: Days between `signup_date` and `analysis_date`.
-        *   `days_since_last_activity`: Days between `last_activity_date` and `analysis_date`. For users with no activities, fill with a large sentinel value (e.g., `account_age_days` + 30).
-    *   Define features `X` (`test_group`, `device_type`, `account_age_days`, `days_since_last_activity`, `total_activities`, `num_logins`) and target `y` (`has_purchased`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame. 
+    *   Handle `NaN` values: Fill `total_interactions`, `total_purchases`, and category-specific purchase counts with 0. Fill `concatenated_feedback` with an empty string. For `days_since_last_interaction` (for users with no interactions), fill with a large sentinel value (e.g., `365 * 5` or 1825 days).
+    *   Calculate `account_age_days`: Days between `signup_date` and the `analysis_date` (from step 2).
+    *   **Create the multi-class target `preferred_category_segment`**: For each user, determine the category they purchased from most. If a tie, pick one (e.g., alphabetically). If no purchases, assign a 'General' segment. (Hint: Use `idxmax()` on category purchase columns after handling zeros).
+    *   Define features `X` (all numerical, `region`, `concatenated_feedback`) and target `y` (`preferred_category_segment`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
 
-4. **Data Visualization**: Create two separate plots to visually inspect the A/B test results and relationships with the target:
-    *   A bar plot comparing the `conversion_rate` (mean of `has_purchased`) between 'Control' and 'Treatment' groups. Include a title like 'Conversion Rate by Test Group'.
-    *   A violin plot (or box plot) showing the distribution of `days_since_last_activity` for users who `has_purchased=0` vs. `has_purchased=1` (e.g., using `hue` in seaborn). Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `preferred_category_segment`:
+    *   A stacked bar plot showing the distribution of `region` for each `preferred_category_segment`.
+    *   A violin plot or box plot showing the distribution of `account_age_days` for each `preferred_category_segment`.
+    Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation**: 
+5. **ML Pipeline & Evaluation (Multi-Class with Text Features and Basic Neural Network)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   For numerical features (`account_age_days`, `days_since_last_activity`, `total_activities`, `num_logins`): Apply `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`test_group`, `device_type`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
-    *   Train the pipeline on the training data (`X_train`, `y_train`). Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+        *   For numerical features (e.g., `age`, `account_age_days`, `total_interactions`, `total_purchases`, `num_electronics_purchases`, etc., `days_since_last_interaction`): Apply `sklearn.preprocessing.StandardScaler`.
+        *   For the categorical feature (`region`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+        *   For the text feature (`concatenated_feedback`): Apply `sklearn.feature_extraction.text.TfidfVectorizer(max_features=1000)`.
+    *   The final estimator in the pipeline should be `sklearn.neural_network.MLPClassifier` (set `random_state=42`, `hidden_layer_sizes=(100, 50)`, `max_iter=300`, `early_stopping=True`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `preferred_category_segment` for `X_test`.
+    *   Calculate and print the `sklearn.metrics.accuracy_score` and `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-A/B Test Analysis, SQL Aggregation for User Behavior, Feature Engineering, Binary Classification with ML Pipelines, Data Visualization
+Multi-class classification, SQL aggregation, Text Feature Engineering (TF-IDF), ColumnTransformer with mixed data types, Basic Neural Network (MLPClassifier) for AI experimentation.
 
 ## Dataset
-Synthetic user activity data for an A/B test campaign.
+Synthetic user demographics, product details, and user interaction data including free-text feedback.
 
 ## Hint
-When simulating the A/B test effect, you can create activities for the 'Treatment' group and then for 'Control', or use a conditional probability for 'purchase' events based on the `test_group` in your data generation loop. For SQL `COUNT` with `CASE WHEN`, use `COALESCE` for `NULL` values after aggregation. Remember to convert relevant columns to datetime objects in pandas before calculating date differences.
+When performing SQL aggregation for category-specific counts, consider using `SUM(CASE WHEN ... END)` or subqueries. For the `concatenated_feedback`, SQLite's `GROUP_CONCAT` function is useful. Integrating `TfidfVectorizer` directly into `ColumnTransformer` is key for handling text features in the pipeline. `MLPClassifier` is a good choice for 'basic AI experimentation' in a scikit-learn context.
