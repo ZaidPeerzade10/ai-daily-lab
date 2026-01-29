@@ -1,47 +1,45 @@
-# AI Daily Lab — 2026-01-28
+# AI Daily Lab — 2026-01-29
 
 ## Task
-1. **Generate Synthetic Data**: Create three pandas DataFrames:
-    *   `users_df`: 500-700 rows. Columns: `user_id` (unique int), `age` (random ints 18-70), `region` (e.g., 'North', 'South', 'East', 'West'), `signup_date` (random dates over last 5 years).
-    *   `products_df`: 100-150 rows. Columns: `product_id` (unique int), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'HomeGoods'), `price` (random floats 50-500).
-    *   `interactions_df`: 3000-5000 rows. Columns: `interaction_id` (unique int), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates *after* respective `signup_date`), `interaction_type` (e.g., 'view', 'add_to_cart', 'purchase'), `feedback_text` (short text containing keywords like 'good', 'excellent', 'slow', 'broken', 'loved it', 'ok' randomly, mixed with generic words). Ensure users show a preference for certain categories.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `subscriptions_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `plan_type` (e.g., 'Basic', 'Premium', 'Enterprise' with random distribution), `monthly_charge` (float, e.g., Basic: 10-20, Premium: 30-50, Enterprise: 80-120), `is_churned` (binary target, 0 or 1, with an approximate 20-30% churn rate), `region` (e.g., 'North', 'South', 'East', 'West').
+    *   `usage_logs_df`: With 4000-6000 rows. Columns: `log_id` (unique integers), `user_id` (randomly sampled from `subscriptions_df` IDs, ensuring some users have many logs and a few have no logs), `log_date` (random dates occurring *after* their respective `signup_date` from `subscriptions_df`), `feature_used` (e.g., 'Feature_A', 'Feature_B', 'Feature_C', 'Feature_D' with varying frequencies), `usage_minutes` (random floats 1-60).
+    *   **Simulate churn behavior**: Churned users (`is_churned=1`) should generally have fewer `usage_logs` and their `log_date`s should be concentrated earlier in their subscription history, with few or no logs in the last few months before `analysis_date`.
 
-2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database. Load `users_df`, `products_df`, and `interactions_df` into tables. Determine an `analysis_date` (e.g., `max(interaction_date)` from `interactions_df` + 30 days). Write a single SQL query that performs the following for *each user*:
-    *   **Joins** `users`, `products`, and `interactions` tables.
+2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `subscriptions_df` into a table named `subscriptions` and `usage_logs_df` into a table named `usage_logs`. Determine an `analysis_date` (e.g., `max(log_date)` from `usage_logs_df` + 30 days, using pandas).
+    Write a single SQL query that performs the following for *each user*:
+    *   **Joins** `subscriptions` and `usage_logs` tables.
     *   **Aggregates** user-level features:
-        *   `total_interactions` (count of all interactions).
-        *   `total_purchases` (count of 'purchase' interactions).
-        *   `num_electronics_purchases`, `num_books_purchases`, etc. (count of 'purchase' interactions for each `category`).
-        *   `concatenated_feedback`: A single string containing all `feedback_text` provided by the user (concatenate with a space).
-        *   `days_since_last_interaction`: Days between `analysis_date` and `MAX(interaction_date)`.
-    *   **Ensures** all users are included, showing 0 for counts, empty string for `concatenated_feedback`, and `NULL` for `days_since_last_interaction` if no interactions.
-    *   Returns `user_id`, `age`, `region`, `signup_date`, `total_interactions`, `total_purchases`, `num_electronics_purchases`, `num_books_purchases`, `num_clothing_purchases`, `num_homegoods_purchases`, `concatenated_feedback`, `days_since_last_interaction`.
+        *   `total_usage_minutes` (sum of `usage_minutes`).
+        *   `num_log_entries` (count of all `log_id`s).
+        *   `num_feature_A_uses`, `num_feature_B_uses`, `num_feature_C_uses`, `num_feature_D_uses` (count of `log_id`s for each respective `feature_used`).
+        *   `days_since_last_activity`: Number of days between the `analysis_date` and the user's `MAX(log_date)`.
+    *   **Ensures** all users are included, showing 0 for counts/sums and `NULL` for `days_since_last_activity` if no usage logs.
+    *   The query should return `user_id`, `region`, `plan_type`, `monthly_charge`, `signup_date`, `is_churned`, `total_usage_minutes`, `num_log_entries`, `num_feature_A_uses`, `num_feature_B_uses`, `num_feature_C_uses`, `num_feature_D_uses`, `days_since_last_activity`.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame. 
-    *   Handle `NaN` values: Fill `total_interactions`, `total_purchases`, and category-specific purchase counts with 0. Fill `concatenated_feedback` with an empty string. For `days_since_last_interaction` (for users with no interactions), fill with a large sentinel value (e.g., `365 * 5` or 1825 days).
+3. **Pandas Feature Engineering & Data Preparation**: Fetch the SQL query results into a pandas DataFrame. 
+    *   Handle `NaN` values: Fill `total_usage_minutes`, `num_log_entries`, and all `num_feature_X_uses` columns with 0. For `days_since_last_activity` (for users with no activities), fill with a large sentinel value (e.g., `365 * 5` or 1825 days).
     *   Calculate `account_age_days`: Days between `signup_date` and the `analysis_date` (from step 2).
-    *   **Create the multi-class target `preferred_category_segment`**: For each user, determine the category they purchased from most. If a tie, pick one (e.g., alphabetically). If no purchases, assign a 'General' segment. (Hint: Use `idxmax()` on category purchase columns after handling zeros).
-    *   Define features `X` (all numerical, `region`, `concatenated_feedback`) and target `y` (`preferred_category_segment`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+    *   Define features `X` (all numerical and categorical features engineered) and target `y` (`is_churned`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `preferred_category_segment`:
-    *   A stacked bar plot showing the distribution of `region` for each `preferred_category_segment`.
-    *   A violin plot or box plot showing the distribution of `account_age_days` for each `preferred_category_segment`.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_churned`:
+    *   A violin plot (or box plot) showing the distribution of `days_since_last_activity` for users with `is_churned=0` vs. `is_churned=1`.
+    *   A stacked bar chart or count plot showing the distribution of `is_churned` across different `plan_type`s.
     Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class with Text Features and Basic Neural Network)**: 
+5. **ML Pipeline & Evaluation (Basic AI Experimentation)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `age`, `account_age_days`, `total_interactions`, `total_purchases`, `num_electronics_purchases`, etc., `days_since_last_interaction`): Apply `sklearn.preprocessing.StandardScaler`.
-        *   For the categorical feature (`region`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-        *   For the text feature (`concatenated_feedback`): Apply `sklearn.feature_extraction.text.TfidfVectorizer(max_features=1000)`.
-    *   The final estimator in the pipeline should be `sklearn.neural_network.MLPClassifier` (set `random_state=42`, `hidden_layer_sizes=(100, 50)`, `max_iter=300`, `early_stopping=True`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `preferred_category_segment` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and `sklearn.metrics.classification_report` for the test set predictions.
+        *   For numerical features (e.g., `monthly_charge`, `account_age_days`, `total_usage_minutes`, `num_log_entries`, `days_since_last_activity`, `num_feature_X_uses`): Apply `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features (`region`, `plan_type`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.GradientBoostingClassifier` (set `random_state=42`, `n_estimators=100`, `learning_rate=0.1`).
+    *   Train the pipeline on the training data (`X_train`, `y_train`). Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Multi-class classification, SQL aggregation, Text Feature Engineering (TF-IDF), ColumnTransformer with mixed data types, Basic Neural Network (MLPClassifier) for AI experimentation.
+SQL analytics (complex aggregations), Pandas feature engineering (datetime, conditional filling), chronological data preparation, ML pipelines with `ColumnTransformer`, advanced classification model (`GradientBoostingClassifier`), and visualization for churn analysis.
 
 ## Dataset
-Synthetic user demographics, product details, and user interaction data including free-text feedback.
+Synthetic data for subscription users and their feature usage logs, designed to reflect churn behavior.
 
 ## Hint
-When performing SQL aggregation for category-specific counts, consider using `SUM(CASE WHEN ... END)` or subqueries. For the `concatenated_feedback`, SQLite's `GROUP_CONCAT` function is useful. Integrating `TfidfVectorizer` directly into `ColumnTransformer` is key for handling text features in the pipeline. `MLPClassifier` is a good choice for 'basic AI experimentation' in a scikit-learn context.
+For the SQL query in step 2, to count feature-specific usage, you can use `SUM(CASE WHEN feature_used = 'Feature_A' THEN 1 ELSE 0 END)` within your `GROUP BY user_id` aggregation. Remember to handle users with no usage logs gracefully in the SQL `LEFT JOIN` and subsequent pandas `fillna` steps.
