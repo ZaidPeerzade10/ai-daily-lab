@@ -1,52 +1,48 @@
-# AI Daily Lab — 2026-02-03
+# AI Daily Lab — 2026-02-04
 
 ## Task
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet' with random distribution), `country` (e.g., 'USA', 'Canada', 'UK', 'Germany' with random distribution).
-    *   `content_df`: With 100-150 rows. Columns: `content_id` (unique integers), `content_type` (e.g., 'Article', 'Video', 'Podcast' with varying proportions), `topic` (e.g., 'Tech', 'Finance', 'Health', 'Lifestyle', 'Entertainment'), `duration_minutes` (random floats between 2.0 and 60.0).
-    *   `interactions_df`: With 3000-5000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many interactions and a few have none), `content_id` (randomly sampled from `content_df` IDs), `interaction_date` (random dates occurring *after* their respective `signup_date`), `interaction_type` (e.g., 'view', 'like', 'share', 'comment', 'bookmark' with varying frequencies).
-    *   **Simulate varied engagement**: Ensure the data generation reflects that some users primarily 'view', others 'like' or 'comment' more, and that activity levels vary.
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `region` (e.g., 'North', 'South', 'East', 'West' with random distribution), `age` (random integers 18-70).
+    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'HomeGoods'), `price` (random floats between 50.0 and 500.0).
+    *   `interactions_df`: With 5000-8000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates occurring *after* their respective `signup_date`), `interaction_type` (e.g., 'view', 'add_to_cart', 'purchase').
+    *   **Simulate realistic patterns**: Ensure `interaction_date` is always after `signup_date`. Generate data such that some users show a preference for certain categories (e.g., younger users in 'North' might interact more with 'Electronics'). Also, ensure some user-product pairs have 'purchase' interactions, which will be our target. 
 
-2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `content_df`, and `interactions_df` into tables named `users`, `content`, and `interactions` respectively. Determine an `analysis_date` (e.g., `max(interaction_date)` from `interactions_df` + 30 days, using pandas).
-    Write a single SQL query that performs the following for *each user*:
-    *   **Joins** `users`, `content`, and `interactions` tables.
-    *   **Aggregates** user-level features:
-        *   `total_interactions` (count of all interactions)
-        *   `num_views` (count of 'view' interactions)
-        *   `num_likes` (count of 'like' interactions)
-        *   `num_comments` (count of 'comment' interactions)
-        *   `total_duration_spent` (sum of `content.duration_minutes` for all interactions a user had).
-        *   `days_since_last_interaction` (number of days between the `analysis_date` and the user's `MAX(interaction_date)`).
-    *   **Ensures** all users are included (using a `LEFT JOIN`), showing 0 for counts/sums and `NULL` for `days_since_last_interaction` if no interactions.
-    *   The query should return `user_id`, `country`, `device_type`, `signup_date`, `total_interactions`, `num_views`, `num_likes`, `num_comments`, `total_duration_spent`, `days_since_last_interaction`.
+2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `interactions_df` into tables named `users`, `products`, and `interactions` respectively. Determine an `analysis_date` (e.g., `max(interaction_date)` from `interactions_df` + 60 days, using pandas) and a `feature_cutoff_date` (`analysis_date` - 90 days).
+    Write a single SQL query that performs the following for *each unique user-product pair* that had at least one interaction *before* the `feature_cutoff_date`:
+    *   **Joins** `users`, `products`, and `interactions` tables.
+    *   **Aggregates features based on interactions *before* `feature_cutoff_date`**: 
+        *   `num_views_for_product_pre_cutoff`: Count of 'view' interactions for *this user and this product*.
+        *   `num_add_to_cart_for_product_pre_cutoff`: Count of 'add_to_cart' interactions for *this user and this product*.
+        *   `user_total_interactions_pre_cutoff`: Total interactions (any type) for *this user across all products*.
+        *   `days_since_signup_first_interaction_with_product_pre_cutoff`: Days between `signup_date` and `MIN(interaction_date)` for *this user and this product* (only considering interactions before `feature_cutoff_date`).
+    *   **Includes static user and product attributes**: `region`, `age`, `category`, `price`, `signup_date`.
+    *   The query should return `user_id`, `product_id`, `region`, `age`, `signup_date`, `category`, `price`, and all the aggregated features.
+    *   **Hint**: Use `LEFT JOIN` on interactions and `GROUP BY user_id, product_id, ...` along with `WHERE interaction_date < '{feature_cutoff_date_str}'` to create the pre-cutoff features.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame.
-    *   Handle `NaN` values: Fill `total_interactions`, `num_views`, `num_likes`, `num_comments`, `total_duration_spent` with 0. For `days_since_last_interaction` (for users with no activities), fill with a large sentinel value (e.g., `365 * 5` or 1825 days).
-    *   Convert `signup_date` to datetime. Calculate `account_age_days`: The number of days between `signup_date` and the `analysis_date` (from step 2).
-    *   **Create the multi-class target `engagement_segment`**: Based on `total_interactions`, `num_comments`, and `num_likes`. First, calculate the 25th percentile for non-zero `num_comments` and `num_likes`, and the 50th percentile for non-zero `total_interactions`. Then, define segments:
-        *   'Heavy_Contributor': If `num_comments` is above the 25th percentile OR `num_likes` is above the 25th percentile.
-        *   'Frequent_Viewer': If `total_interactions` is above the 50th percentile AND NOT classified as 'Heavy_Contributor'.
-        *   'Casual_Browser': All remaining users.
-    *   Define features `X` (`country`, `device_type`, `account_age_days`, `total_interactions`, `num_views`, `num_likes`, `num_comments`, `total_duration_spent`, `days_since_last_interaction`) and target `y` (`engagement_segment`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (let's call it `user_product_features_df`).
+    *   Convert `signup_date` to datetime objects. Calculate `account_age_at_cutoff_days`: Days between `signup_date` and `feature_cutoff_date`.
+    *   Handle `NaN` values: Fill `num_views_for_product_pre_cutoff`, `num_add_to_cart_for_product_pre_cutoff`, `user_total_interactions_pre_cutoff` with 0. For `days_since_signup_first_interaction_with_product_pre_cutoff`, fill with `account_age_at_cutoff_days` (for cases where a user-product pair existed but had no interactions before cutoff).
+    *   **Create the Binary Target `made_future_purchase`**: For each `(user_id, product_id)` pair in `user_product_features_df`, determine if there was *any* 'purchase' interaction for that specific pair *between `feature_cutoff_date` and `analysis_date`*. This will require another merge with `interactions_df` filtered for the target period.
+    *   Define features `X` (all numerical and categorical features engineered) and target `y` (`made_future_purchase`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` to handle potential class imbalance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `engagement_segment`:
-    *   A violin plot (or box plot) showing the distribution of `total_duration_spent` for each `engagement_segment`.
-    *   A stacked bar chart showing the distribution of `engagement_segment` across different `device_type`s.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `made_future_purchase`:
+    *   A violin plot (or box plot) showing the distribution of `price` for users who `made_future_purchase=0` vs. `made_future_purchase=1`.
+    *   A stacked bar chart showing the proportion of `made_future_purchase` (0 or 1) across different `region`s.
     Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Basic AI Experimentation)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `account_age_days`, `total_interactions`, `num_views`, `num_likes`, `num_comments`, `total_duration_spent`, `days_since_last_interaction`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`country`, `device_type`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestClassifier` (set `random_state=42`, `n_estimators=100`, `class_weight='balanced'` for potential class imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `engagement_segment` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+        *   For numerical features (e.g., `age`, `price`, `account_age_at_cutoff_days`, `num_views_for_product_pre_cutoff`, etc.): Apply `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features (`region`, `category`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'` for reproducibility).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-User Content Engagement Segmentation
+Predicting future user-product purchase intent using historical interaction data, SQL-based lagged features, and a classification ML pipeline.
 
 ## Dataset
-Synthetic User Content Interaction Data
+Three interconnected DataFrames: `users_df` (user demographics), `products_df` (product attributes), and `interactions_df` (user actions like view, add_to_cart, purchase over time, linking users to products).
 
 ## Hint
-When creating the `engagement_segment` target, remember to calculate quantiles only on non-zero values for relevant features (e.g., `df['col'][df['col'] > 0].quantile(0.25)`) to ensure meaningful thresholds for active users. For the SQL query, use `SUM(CASE WHEN interactions.interaction_type = 'view' THEN 1 ELSE 0 END)` for specific interaction counts.
+When performing the SQL aggregation, carefully define your `WHERE` clauses for `interaction_date` to ensure features are calculated *before* the `feature_cutoff_date`. For the target `made_future_purchase` in Pandas, you'll need to join the `user_product_features_df` with the original `interactions_df` again, this time filtering `interactions_df` for events within your target period (`feature_cutoff_date` to `analysis_date`) and specifically for `interaction_type = 'purchase'`.
