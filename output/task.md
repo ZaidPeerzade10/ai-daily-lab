@@ -1,54 +1,49 @@
-# AI Daily Lab — 2026-02-07
+# AI Daily Lab — 2026-02-08
 
 ## Task
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `customers_df`: With 500-700 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 5 years), `initial_plan` (e.g., 'Trial', 'Basic', 'Premium' with random distribution), `age` (random integers 18-70), `acquisition_channel` (e.g., 'Organic', 'Social', 'Referral', 'Paid_Ad').
-    *   `payments_df`: With 3000-5000 rows. Columns: `payment_id` (unique integers), `customer_id` (randomly sampled from `customers_df` IDs, ensuring some customers have many payments, some have few, and some have none), `payment_date` (random dates occurring *after* their respective `signup_date`), `amount` (random floats between 10.0 and 150.0, potentially higher for 'Premium' plans).
-    *   **Simulate realistic patterns**: Ensure `payment_date` is always after `signup_date`. Generate data such that customers on 'Trial' plans might have zero or few payments, and customers with 'Premium' plans might have higher amounts.
+    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'HomeGoods'), `price` (random floats between 50.0 and 500.0), `release_date` (random dates over the last 3 years).
+    *   `reviews_df`: With 800-1200 rows. Columns: `review_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `user_id` (random integers to simulate unique users, 1-200), `review_date` (random dates occurring *after* `release_date`), `rating` (random integers 1-5, biased towards 3-5).
+    *   **Crucially**: Synthetically generate `review_text` (short text strings) that **reflects the `rating`**. For example, reviews with `rating` 5-4 should contain positive words ('excellent', 'great', 'loved it', 'high quality'), `rating` 3 should contain neutral words ('ok', 'fine', 'average', 'decent'), and `rating` 2-1 should contain negative words ('bad', 'terrible', 'broken', 'disappointing'). Mix these with generic words.
 
-2. **Load into SQLite & SQL Feature Engineering (Early Payment Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `customers_df` into a table named `customers` and `payments_df` into a table named `payments`. Determine a `global_analysis_date` (e.g., the maximum `payment_date` in `payments_df` + 60 days, using pandas).
-    Define an `initial_observation_days` (e.g., 90 days).
-    Write a single SQL query that performs the following for *each user*:
-    *   **Joins** `customers` and `payments` tables.
-    *   **Aggregates initial payment behavior** for payments occurring within the **first `initial_observation_days`** after their `signup_date` (i.e., `payment_date` between `signup_date` and `signup_date + initial_observation_days`):
-        *   `initial_num_payments` (count of payments)
-        *   `initial_total_revenue` (sum of `amount`)
-        *   `initial_avg_payment_value` (average `amount`)
-        *   `initial_days_to_first_payment` (number of days between `signup_date` and the `MIN(payment_date)` within the initial window. `NULL` if no initial payment).
-    *   **Includes static customer attributes**: `age`, `acquisition_channel`, `initial_plan`, `signup_date`.
-    *   **Ensures** all customers are included (using a `LEFT JOIN`), showing 0 for counts/sums and `NULL` for averages/days if no payments in the initial period.
-    *   The query should return `customer_id`, `age`, `acquisition_channel`, `initial_plan`, `signup_date`, `initial_num_payments`, `initial_total_revenue`, `initial_avg_payment_value`, `initial_days_to_first_payment`.
+2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` into a table named `products` and `reviews_df` into a table named `reviews`. Determine a `global_analysis_date` (e.g., `max(review_date)` from `reviews_df` + 30 days, using pandas).
+    Write a single SQL query that performs the following for *each product*:
+    *   **Joins** `products` and `reviews` tables.
+    *   **Aggregates product-level features** from reviews (up to `global_analysis_date`):
+        *   `avg_rating` (average of `rating`)
+        *   `num_reviews` (count of reviews)
+        *   `days_since_last_review`: Number of days between `global_analysis_date` and `MAX(review_date)` for the product.
+    *   **Ensures** all products are included (using a `LEFT JOIN`), showing 0 for counts and `NULL` for `avg_rating`, `days_since_last_review` if no reviews.
+    *   The query should return `product_id`, `category`, `price`, `release_date`, `avg_rating`, `num_reviews`, `days_since_last_review`, and `GROUP_CONCAT(review_text, ' ') AS concatenated_reviews_text` (to extract text features in pandas).
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation (CLV Segment)**: Fetch the SQL query results into a pandas DataFrame (`customer_initial_features_df`).
-    *   Handle `NaN` values: Fill `initial_num_payments`, `initial_total_revenue`, `initial_avg_payment_value` with 0. For `initial_days_to_first_payment` (for customers with no initial payments), fill with a large sentinel value (e.g., `initial_observation_days` + 30 or 120 days).
-    *   Convert `signup_date` to datetime. Calculate `account_age_at_cutoff_days`: The number of days between `signup_date` and the date representing `signup_date + initial_observation_days` (for consistency with the feature window).
-    *   **Calculate Total Lifetime Revenue**: From the original `payments_df`, calculate `total_lifetime_revenue` (sum of `amount` for all payments up to `global_analysis_date`) for each customer. Merge this aggregate with `customer_initial_features_df` (left join).
-    *   Fill `NaN` in `total_lifetime_revenue` with 0 for customers with no payments ever.
-    *   **Create the Multi-Class Target `clv_segment`**: Based on `total_lifetime_revenue` (excluding those with 0 lifetime revenue). First, calculate quantiles (e.g., 33rd and 66th percentiles) for *non-zero* `total_lifetime_revenue`. Then, define segments:
-        *   'High_Value': `total_lifetime_revenue` is above the 66th percentile of non-zero revenues.
-        *   'Medium_Value': `total_lifetime_revenue` is between the 33rd and 66th percentiles of non-zero revenues.
-        *   'Low_Value': `total_lifetime_revenue` is below the 33rd percentile of non-zero revenues *and* greater than 0.
-        *   'Churned_No_Revenue': `total_lifetime_revenue` is 0.
-    *   Define features `X` (`age`, `acquisition_channel`, `initial_plan`, `account_age_at_cutoff_days`, `initial_num_payments`, `initial_total_revenue`, `initial_avg_payment_value`, `initial_days_to_first_payment`) and target `y` (`clv_segment`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
+    *   Handle `NaN` values: Fill `num_reviews` with 0. For `avg_rating`, fill with a neutral value (e.g., 3.0) for products with no reviews. For `days_since_last_review`, fill with a large sentinel value (e.g., `365 * 5` or 1825 days). Fill `concatenated_reviews_text` with an empty string for products with no reviews.
+    *   Convert `release_date` to datetime objects. Calculate `product_age_at_analysis_days`: Days between `release_date` and the `global_analysis_date` (from step 2). Handle division by zero for `product_age_at_analysis_days` if a product was released on the analysis date (or simply use 1 to avoid it).
+    *   **Extract Text Features**: From `concatenated_reviews_text`, calculate:
+        *   `positive_word_count`: Number of occurrences of pre-defined positive keywords (e.g., 'great', 'excellent', 'loved', 'high quality')
+        *   `negative_word_count`: Number of occurrences of pre-defined negative keywords (e.g., 'bad', 'terrible', 'broken', 'disappointing')
+    *   Calculate `review_density`: `num_reviews` / (`product_age_at_analysis_days` + 1). Use `+1` to prevent division by zero for newly released products.
+    *   **Create the Binary Target `is_successful_product`**: A product is 'successful' (1) if its `avg_rating` is greater than or equal to 4.0 *AND* its `num_reviews` is above the 70th percentile among products with at least one review. Otherwise, 0.
+    *   Define features `X` (`category`, `price`, `product_age_at_analysis_days`, `avg_rating`, `num_reviews`, `days_since_last_review`, `positive_word_count`, `negative_word_count`, `review_density`) and target `y` (`is_successful_product`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `clv_segment`:
-    *   A violin plot (or box plot) showing the distribution of `initial_total_revenue` for each `clv_segment`.
-    *   A stacked bar chart showing the distribution of `clv_segment` across different `initial_plan` values.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_successful_product`:
+    *   A violin plot (or box plot) showing the distribution of `avg_rating` for 'successful' vs. 'unsuccessful' products.
+    *   A stacked bar chart showing the proportion of `is_successful_product` (0 or 1) across different `category` values.
     Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (`age`, `account_age_at_cutoff_days`, `initial_num_payments`, `initial_total_revenue`, `initial_avg_payment_value`, `initial_days_to_first_payment`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`acquisition_channel`, `initial_plan`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+        *   For numerical features (e.g., `price`, `product_age_at_analysis_days`, `avg_rating`, `num_reviews`, `days_since_last_review`, `positive_word_count`, `negative_word_count`, `review_density`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For the categorical feature (`category`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
     *   The final estimator in the pipeline should be `sklearn.ensemble.GradientBoostingClassifier` (set `random_state=42`, `n_estimators=100`, `learning_rate=0.1`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `clv_segment` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on `X_test`.
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Predicting multi-class Customer Lifetime Value (CLV) segments based on early subscription and payment behavior using SQL feature engineering and an ML pipeline.
+Product success prediction using aggregated review data and product attributes, featuring custom text feature extraction, temporal analytics, and binary classification.
 
 ## Dataset
-Synthetic customer subscription and payment data.
+Synthetic Product and Review data.
 
 ## Hint
-When defining the `clv_segment`, ensure you calculate quantiles only on customers with non-zero total lifetime revenue before segmenting, and then explicitly handle the zero-revenue (churned) group. Use a `FeatureUnion` or `ColumnTransformer` for feature preprocessing in the ML pipeline to handle different feature types effectively.
+When generating `review_text`, create lists of positive, neutral, and negative words. Sample from these lists based on the `rating` to ensure realistic correlation. For SQL, use `GROUP_CONCAT` to get all review text for a product, then process keywords in pandas.
