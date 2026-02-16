@@ -1,53 +1,52 @@
-# AI Daily Lab — 2026-02-15
+# AI Daily Lab — 2026-02-16
 
 ## Task
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `age` (random integers 18-70), `acquisition_channel` (e.g., 'Organic', 'Social', 'Referral', 'Paid_Ad').
-    *   `transactions_df`: With 3000-5000 rows. Columns: `transaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many transactions, some few, and some none), `transaction_date` (random dates occurring *after* their respective `signup_date`), `amount` (random floats between 10.0 and 1000.0), `product_category` (e.g., 'Electronics', 'Books', 'Clothing', 'Groceries', 'Services').
-    *   **Simulate Realistic Behavior**: Ensure `transaction_date` is always after `signup_date`. Generate data such that users have varying frequencies and amounts. Some users might primarily purchase from specific categories or have bursts of activity.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `applicants_df`: With 500-700 rows. Columns: `applicant_id` (unique integers), `application_date` (random dates over the last 5 years), `age` (random integers 18-70), `income` (random floats 25000-200000), `credit_score` (random integers 300-850, biased towards higher scores), `employment_status` (e.g., 'Employed', 'Self-Employed', 'Unemployed'), `residence_type` (e.g., 'Rent', 'Own').
+    *   `loans_df`: With 1000-1500 rows. Columns: `loan_id` (unique integers), `applicant_id` (randomly sampled from `applicants_df` IDs, ensuring some applicants have multiple loans), `loan_amount` (random floats 5000-50000), `interest_rate` (random floats 0.05-0.20), `loan_term_months` (random integers 12-60), `loan_type` (e.g., 'Personal', 'Auto', 'Home_Equity'), `disbursement_date` (random dates *after* respective `application_date`). Generate a hidden `is_default` (binary, 0 or 1, with an approximate 10-15% default rate). 
+    *   `payments_df`: With 5000-8000 rows. Columns: `payment_id` (unique integers), `loan_id` (randomly sampled from `loans_df` IDs), `payment_date` (random dates occurring *after* `disbursement_date` for the respective loan), `amount_paid` (random floats, typically `loan_amount / loan_term_months` with some variance), `is_late` (binary, 0 or 1, with a small percentage being late). 
+    *   **Simulate realistic patterns**: Ensure `payment_date` is after `disbursement_date`. Defaulted loans (`is_default=1`) should have lower `credit_score` and/or higher `interest_rate`, and their `payments_df` entries should either stop prematurely or show more `is_late=1` flags, especially before the default event. Non-defaulted loans should show consistent payments up to the data range limit.
 
-2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` into a table named `users` and `transactions_df` into a table named `transactions`. Determine a `global_analysis_date` (e.g., `max(transaction_date)` from `transactions_df` + 60 days, using pandas) and a `feature_cutoff_date` (`global_analysis_date` - 90 days).
-    Write a single SQL query that performs the following for *each user*, aggregating their transaction behavior *before* the `feature_cutoff_date`:
-    *   **Joins** `users` and `transactions` tables.
-    *   **Aggregates features based on transactions *before* `feature_cutoff_date`**: 
-        *   `total_spend_pre_cutoff` (sum of `amount`)
-        *   `num_transactions_pre_cutoff` (count of `transaction_id`s)
-        *   `avg_transaction_value_pre_cutoff` (average `amount`)
-        *   `num_unique_categories_pre_cutoff` (count of distinct `product_category`s).
-        *   `days_since_last_transaction_pre_cutoff`: Number of days between `feature_cutoff_date` and `MAX(transaction_date)` for the user (only considering transactions before `feature_cutoff_date`).
-    *   **Includes static user attributes**: `user_id`, `age`, `region`, `acquisition_channel`, `signup_date`.
-    *   **Ensures** all users are included (using a `LEFT JOIN`), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_since_last_transaction_pre_cutoff` if no transactions before cutoff.
-    *   The query should return `user_id`, `age`, `region`, `acquisition_channel`, `signup_date`, and all the aggregated features.
+2. **Load into SQLite & SQL Feature Engineering (Prior Loan Performance)**: Create an in-memory SQLite database using `sqlite3`. Load `applicants_df`, `loans_df`, and `payments_df` into tables named `applicants`, `loans`, and `payments` respectively. Determine a `global_analysis_date` (e.g., `max(payment_date)` from `payments_df` + 60 days, using pandas) and a `feature_cutoff_date` (`global_analysis_date` - 180 days).
+    Write a single SQL query that performs the following for *each loan* (from `loans` table), aggregating its payment behavior *before* the `feature_cutoff_date`:
+    *   **Joins** `applicants`, `loans`, and `payments` tables.
+    *   **Aggregates features based on payments *before* `feature_cutoff_date`**: 
+        *   `num_payments_pre_cutoff` (count of `payment_id`s)
+        *   `total_amount_paid_pre_cutoff` (sum of `amount_paid`)
+        *   `avg_payment_value_pre_cutoff` (average `amount_paid`)
+        *   `num_late_payments_pre_cutoff` (count of `is_late=1` payments)
+        *   `days_since_last_payment_pre_cutoff`: Number of days between `feature_cutoff_date` and `MAX(payment_date)` for the specific loan.
+        *   `loan_age_at_cutoff_days`: Number of days between `disbursement_date` and `feature_cutoff_date`.
+    *   **Includes static applicant and loan attributes**: `applicant_id`, `age`, `income`, `credit_score`, `employment_status`, `residence_type`, `loan_amount`, `interest_rate`, `loan_term_months`, `loan_type`, `disbursement_date`.
+    *   **Ensures** all loans are included (using `LEFT JOIN`), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_since_last_payment_pre_cutoff` if no payments before cutoff.
+    *   The query should return `loan_id`, `applicant_id`, `age`, `income`, `credit_score`, `employment_status`, `residence_type`, `loan_amount`, `interest_rate`, `loan_term_months`, `loan_type`, `disbursement_date`, and all the aggregated features.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_features_df`).
-    *   Handle `NaN` values: Fill `total_spend_pre_cutoff`, `num_transactions_pre_cutoff`, `num_unique_categories_pre_cutoff` with 0. Fill `avg_transaction_value_pre_cutoff` with 0.0. For `days_since_last_transaction_pre_cutoff` (for users with no activities before cutoff), fill with a large sentinel value (e.g., `account_age_at_cutoff_days` + 30).
-    *   Convert `signup_date` to datetime objects. Calculate `account_age_at_cutoff_days`: The number of days between `signup_date` and the `feature_cutoff_date`.
-    *   **Calculate Future Spend**: From the original `transactions_df`, calculate `total_spend_future` (sum of `amount`) for each user for transactions occurring *between `feature_cutoff_date` and `global_analysis_date`*. Merge this aggregate with `user_features_df` (left join), filling `NaN`s with 0.
-    *   **Create the Multi-Class Target `future_spending_tier`**: Based on `total_spend_future`. First, calculate the 33rd and 66th percentiles for *non-zero* `total_spend_future`. Then, define segments:
-        *   'No_Future_Spend': `total_spend_future` == 0.
-        *   'Low_Spender': `total_spend_future` > 0 AND `total_spend_future` <= 33rd percentile.
-        *   'Medium_Spender': `total_spend_future` > 33rd percentile AND `total_spend_future` <= 66th percentile.
-        *   'High_Spender': `total_spend_future` > 66th percentile.
-    *   Define features `X` (all numerical and categorical features engineered) and target `y` (`future_spending_tier`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation (Loan Default Prediction)**: Fetch the SQL query results into a pandas DataFrame (`loan_features_df`).
+    *   Handle `NaN` values: Fill `num_payments_pre_cutoff`, `total_amount_paid_pre_cutoff`, `num_late_payments_pre_cutoff` with 0. Fill `avg_payment_value_pre_cutoff` with 0.0. For `days_since_last_payment_pre_cutoff` (for loans with no payments before cutoff), fill with `loan_age_at_cutoff_days` + 30 (or a large sentinel like 9999).
+    *   Convert `disbursement_date` to datetime objects.
+    *   Calculate `payment_frequency_pre_cutoff`: `num_payments_pre_cutoff` / (`loan_age_at_cutoff_days` + 1). Use `+1` to prevent division by zero for very new loans at cutoff.
+    *   Calculate `ratio_late_payments_pre_cutoff`: `num_late_payments_pre_cutoff` / (`num_payments_pre_cutoff` if `num_payments_pre_cutoff` > 0 else 1.0).
+    *   **Create the Binary Target `is_default`**: Merge the `is_default` column from the original `loans_df` into `loan_features_df` using `loan_id`. This directly represents the target of interest.
+    *   Define features `X` (all numerical: `age`, `income`, `credit_score`, `loan_amount`, `interest_rate`, `loan_term_months`, `loan_age_at_cutoff_days`, `num_payments_pre_cutoff`, `total_amount_paid_pre_cutoff`, `avg_payment_value_pre_cutoff`, `num_late_payments_pre_cutoff`, `days_since_last_payment_pre_cutoff`, `payment_frequency_pre_cutoff`, `ratio_late_payments_pre_cutoff`; categorical: `employment_status`, `residence_type`, `loan_type`) and target `y` (`is_default`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `future_spending_tier`:
-    *   A violin plot (or box plot) showing the distribution of `total_spend_pre_cutoff` for each `future_spending_tier`.
-    *   A stacked bar chart showing the distribution of `future_spending_tier` across different `region`s.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_default`:
+    *   A violin plot (or box plot) showing the distribution of `credit_score` for loans with `is_default=0` vs. `is_default=1`.
+    *   A stacked bar chart showing the proportion of `is_default` (0 or 1) across different `loan_type` values.
     Ensure plots have appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `age`, `account_age_at_cutoff_days`, `total_spend_pre_cutoff`, `num_transactions_pre_cutoff`, `avg_transaction_value_pre_cutoff`, `num_unique_categories_pre_cutoff`, `days_since_last_transaction_pre_cutoff`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`region`, `acquisition_channel`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestClassifier` (set `random_state=42`, `n_estimators=100`, `class_weight='balanced'` for potential class imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `future_spending_tier` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+        *   For numerical features (e.g., `age`, `income`, `credit_score`, `loan_amount`, `interest_rate`, `loan_term_months`, `loan_age_at_cutoff_days`, `num_payments_pre_cutoff`, `total_amount_paid_pre_cutoff`, `avg_payment_value_pre_cutoff`, `num_late_payments_pre_cutoff`, `days_since_last_payment_pre_cutoff`, `payment_frequency_pre_cutoff`, `ratio_late_payments_pre_cutoff`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features (`employment_status`, `residence_type`, `loan_type`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'`, `class_weight='balanced'` for potential class imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Customer Segmentation, Time-Windowed Feature Engineering, Multi-Class Classification
+Predicting Loan Default, Time-Series Aggregation with SQL, Feature Engineering for Financial Data, Binary Classification.
 
 ## Dataset
-Synthetic customer and transaction data.
+Synthetic data simulating loan applicants, their loan details, and payment history.
 
 ## Hint
-Pay close attention to the time windows defined by `global_analysis_date` and `feature_cutoff_date` for both feature aggregation in SQL and target calculation in pandas. Use SQL's `LEFT JOIN` and `GROUP BY` with `CASE` statements or `FILTER` clause for conditional aggregation. Remember to handle `NaN` values gracefully, especially for users with no activity in specific windows.
+When generating `payments_df`, ensure `payment_date` is always after the corresponding loan's `disbursement_date` and that defaulted loans have payment anomalies (e.g., fewer payments, more late payments, or payments stopping earlier). For SQL, `GROUP BY loan_id` and utilize `CASE WHEN` for counting `is_late` events. Date calculations in SQL will involve `JULIANDAY()` or `STRFTIME('%J', ...)` for finding day differences.
