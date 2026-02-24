@@ -1,55 +1,62 @@
-# AI Daily Lab — 2026-02-22
+# AI Daily Lab — 2026-02-24
 
 ## Task
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `customers_df`: With 500-700 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `account_tier` (e.g., 'Bronze', 'Silver', 'Gold').
-    *   `messages_df`: With 5000-8000 rows. Columns: `message_id` (unique integers), `customer_id` (randomly sampled from `customers_df` IDs), `message_date` (random dates occurring *after* their respective `signup_date`), `message_text` (short text strings), `actual_response_time_hours` (random floats 0.5-72.0).
-    *   **Simulate realistic patterns**: Ensure `message_date` is always after `signup_date`. Synthetically generate `message_text` to reflect a hidden `message_intent_category` (e.g., 'Billing_Issue', 'Technical_Support', 'Feature_Request', 'General_Inquiry'). For example, 'Billing_Issue' texts might contain 'bill', 'invoice', 'charge', 'payment', and 'Technical_Support' might contain 'error', 'bug', 'crash', 'login'. Bias `actual_response_time_hours` such that 'Billing_Issue' or 'Technical_Support' messages generally have shorter response times (e.g., 0.5-24 hours) compared to 'Feature_Request' or 'General_Inquiry' (e.g., 12-72 hours). Sort `messages_df` by `customer_id` then `message_date`.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `user_level` (e.g., 'Newbie', 'Contributor', 'Expert'), `topic_preference` (e.g., 'Python', 'SQL', 'ML_Ops', 'Viz', 'General'), `region` (e.g., 'North', 'South', 'East', 'West').
+    *   `posts_df`: With 3000-5000 rows. Columns: `post_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `post_date` (random dates occurring *after* `signup_date`), `post_category` (e.g., 'Question', 'Answer', 'Discussion', 'Tutorial'), `word_count` (random integers 5-500), `contains_code` (binary, 0 or 1).
+    *   `comments_df`: With 5000-8000 rows. Columns: `comment_id` (unique integers), `post_id` (randomly sampled from `posts_df` IDs), `user_id` (randomly sampled from `users_df` IDs, ensuring some comments are by the post author and some by others), `comment_date` (random dates occurring *after* their respective `post_date`), `sentiment_score` (random floats between -1.0 and 1.0).
+    *   **Simulate realistic activity patterns**: Ensure `post_date` is after `signup_date` and `comment_date` is after `post_date`. Bias data such that:
+        *   'Expert' users post more frequently, have higher `word_count` posts (especially those with `contains_code=1`), and their comments generally have a higher or more neutral `sentiment_score`.
+        *   'Newbie' users post fewer times, more 'Question' category posts, shorter `word_count`, and potentially more varied `sentiment_score` in comments.
+        *   Sort `posts_df` and `comments_df` by `user_id` then `date`.
 
-2. **Load into SQLite & SQL Feature Engineering (Prior User Message Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `customers_df` into a table named `customers` and `messages_df` into a table named `messages`.
-    Write a single SQL query that performs the following for *each message* in `messages`:
-    *   **Joins** `messages` with `customers` to get customer attributes.
-    *   **Calculates sequential features based on the user's *prior messages* (excluding the current one)**:
-        *   `user_prior_message_count`: Count of all *previous* messages by the same user.
-        *   `user_avg_prior_response_time_hours`: Average `actual_response_time_hours` of all *previous* messages by the same user. If no previous, use 0.0.
-        *   `days_since_last_user_message`: Number of days between the current `message_date` and the user's *most recent prior* `message_date`. If it's the user's first message, use the number of days between `signup_date` and `message_date`.
-    *   **Includes static customer and message attributes**: `message_id`, `customer_id`, `message_date`, `message_text`, `region`, `account_tier`, `signup_date`.
-    *   The query should return `message_id`, `customer_id`, `message_date`, `message_text`, `region`, `account_tier`, `signup_date`, `user_prior_message_count`, `user_avg_prior_response_time_hours`, `days_since_last_user_message`, and `actual_response_time_hours` (as a feature for predicting the target).
-    *   **Hint**: Use window functions with `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` for prior aggregates, and `LAG()` with `COALESCE` for `days_since_last_user_message` (using `julianday` to calculate day differences).
+2. **Load into SQLite & SQL Feature Engineering**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `posts_df`, and `comments_df` into tables named `users`, `posts`, and `comments` respectively. Determine a `global_analysis_date` (e.g., `max(comment_date)` from `comments_df` + 60 days, using pandas) and a `feature_cutoff_date` (`global_analysis_date` - 90 days).
+    Write a single SQL query that performs the following for *each user*, aggregating their post and comment activity *before* the `feature_cutoff_date`:
+    *   **Joins** `users`, `posts`, and `comments` tables.
+    *   **Aggregates features based on activity *before* `feature_cutoff_date`**: 
+        *   `num_posts_pre_cutoff` (count of `post_id`s)
+        *   `num_comments_pre_cutoff` (count of `comment_id`s)
+        *   `avg_post_word_count_pre_cutoff` (average `word_count` from posts)
+        *   `avg_comment_sentiment_pre_cutoff` (average `sentiment_score` from comments)
+        *   `num_unique_post_categories_pre_cutoff` (count of distinct `post_category`s)
+        *   `days_since_last_activity_pre_cutoff`: Number of days between `feature_cutoff_date` and the maximum of `MAX(post_date)` and `MAX(comment_date)` for the user (only considering activities before `feature_cutoff_date`).
+        *   `num_posts_with_code_pre_cutoff` (count of `contains_code=1` in posts).
+    *   **Includes static user attributes**: `user_id`, `user_level`, `topic_preference`, `region`, `signup_date`.
+    *   **Ensures** all users are included (using a `LEFT JOIN` to aggregated subqueries), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_since_last_activity_pre_cutoff` if no activity before cutoff.
+    *   The query should return `user_id`, `user_level`, `topic_preference`, `region`, `signup_date`, and all the aggregated features.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation (Message Intent)**: Fetch the SQL query results into a pandas DataFrame (`message_features_df`).
-    *   Handle `NaN` values: Fill `user_prior_message_count` with 0, `user_avg_prior_response_time_hours` with 0.0. For `days_since_last_user_message`, fill with a large sentinel value (e.g., 9999 days) for first messages (SQL should handle, but double check).
-    *   Convert `signup_date` and `message_date` to datetime objects. Calculate `user_account_age_at_message_days`: Days between `signup_date` and `message_date`.
-    *   **Text Features from `message_text`**: 
-        *   `message_length`: Length of the `message_text`.
-        *   `has_question_mark`: Binary (1 if `message_text` contains '?', else 0).
-        *   `num_keywords_billing`: Count of billing-related keywords (e.g., 'bill', 'invoice', 'charge').
-        *   `num_keywords_tech`: Count of tech-related keywords (e.g., 'error', 'bug', 'crash', 'login').
-    *   **Create the Multi-Class Target `message_intent_category`**: Based on the `actual_response_time_hours` (and the `message_text` itself for clearer segmentation during synthetic data generation).
-        *   'Urgent_Support': `actual_response_time_hours` < 12 (likely 'Billing_Issue' or 'Technical_Support').
-        *   'Standard_Support': `actual_response_time_hours` >= 12 AND `actual_response_time_hours` <= 48.
-        *   'Low_Priority': `actual_response_time_hours` > 48 (likely 'Feature_Request' or 'General_Inquiry').
-    *   Define features `X` (all numerical: `user_account_age_at_message_days`, `user_prior_message_count`, `user_avg_prior_response_time_hours`, `days_since_last_user_message`, `message_length`, `has_question_mark`, `num_keywords_billing`, `num_keywords_tech`; categorical: `region`, `account_tier`; and the raw `message_text`) and target `y` (`message_intent_category`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_engagement_features_df`).
+    *   Handle `NaN` values: Fill `num_posts_pre_cutoff`, `num_comments_pre_cutoff`, `num_unique_post_categories_pre_cutoff`, `num_posts_with_code_pre_cutoff` with 0. Fill `avg_post_word_count_pre_cutoff`, `avg_comment_sentiment_pre_cutoff` with 0.0. For `days_since_last_activity_pre_cutoff` (for users with no activities before cutoff), fill with a large sentinel value (e.g., 9999 days).
+    *   Convert `signup_date` to datetime objects. Calculate `account_age_at_cutoff_days`: The number of days between `signup_date` and the `feature_cutoff_date`.
+    *   Calculate `activity_frequency_pre_cutoff`: `(num_posts_pre_cutoff + num_comments_pre_cutoff)` / (`account_age_at_cutoff_days` + 1). Use `+1` to prevent division by zero for very new accounts at cutoff.
+    *   Calculate `code_contribution_ratio_pre_cutoff`: `num_posts_with_code_pre_cutoff` / (`num_posts_pre_cutoff` if `num_posts_pre_cutoff` > 0 else 1.0).
+    *   **Create the Multi-Class Target `future_engagement_level`**: Calculate `total_future_activities` (sum of posts and comments) for each user from the *original* `posts_df` and `comments_df` occurring *between `feature_cutoff_date` and `global_analysis_date`*. Merge this aggregate with `user_engagement_features_df` (left join), filling `NaN`s with 0.
+        *   Calculate the 33rd and 66th percentiles for *non-zero* `total_future_activities`.
+        *   Define segments:
+            *   'No_Activity': `total_future_activities` == 0.
+            *   'Low_Engagement': `total_future_activities` > 0 AND `total_future_activities` <= 33rd percentile.
+            *   'Medium_Engagement': `total_future_activities` > 33rd percentile AND `total_future_activities` <= 66th percentile.
+            *   'High_Engagement': `total_future_activities` > 66th percentile.
+    *   Define features `X` (all numerical: `account_age_at_cutoff_days`, `num_posts_pre_cutoff`, `num_comments_pre_cutoff`, `avg_post_word_count_pre_cutoff`, `avg_comment_sentiment_pre_cutoff`, `num_unique_post_categories_pre_cutoff`, `days_since_last_activity_pre_cutoff`, `num_posts_with_code_pre_cutoff`, `activity_frequency_pre_cutoff`, `code_contribution_ratio_pre_cutoff`; categorical: `user_level`, `topic_preference`, `region`) and target `y` (`future_engagement_level`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `message_intent_category`:
-    *   A violin plot (or box plot) showing the distribution of `message_length` for each `message_intent_category`.
-    *   A stacked bar chart showing the distribution of `message_intent_category` across different `account_tier` values.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `future_engagement_level`:
+    *   A violin plot (or box plot) showing the distribution of `activity_frequency_pre_cutoff` for each `future_engagement_level`.
+    *   A stacked bar chart showing the proportion of `future_engagement_level` (0, 1, 2, or 3) across different `user_level` values.
     Ensure plots have appropriate labels and titles.
 
 5. **ML Pipeline & Evaluation (Multi-Class)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (`user_account_age_at_message_days`, `user_prior_message_count`, `user_avg_prior_response_time_hours`, `days_since_last_user_message`, `message_length`, `has_question_mark`, `num_keywords_billing`, `num_keywords_tech`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`region`, `account_tier`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-        *   For the text feature (`message_text`): Apply `sklearn.feature_extraction.text.TfidfVectorizer(max_features=500)`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `message_intent_category` for `X_test`.
+        *   For numerical features (e.g., `account_age_at_cutoff_days`, `num_posts_pre_cutoff`, `num_comments_pre_cutoff`, `avg_post_word_count_pre_cutoff`, `avg_comment_sentiment_pre_cutoff`, `num_unique_post_categories_pre_cutoff`, `days_since_last_activity_pre_cutoff`, `num_posts_with_code_pre_cutoff`, `activity_frequency_pre_cutoff`, `code_contribution_ratio_pre_cutoff`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features (`user_level`, `topic_preference`, `region`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestClassifier` (set `random_state=42`, `n_estimators=100`, `class_weight='balanced'` for potential class imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `future_engagement_level` for `X_test`.
     *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Customer Message Intent Classification using sequential user history and text features in an ML pipeline.
+Predicting Future User Engagement Levels in an Online Community
 
 ## Dataset
-Synthetic customer data with interaction messages, including free text and response times.
+Online Community User, Post, and Comment Data
 
 ## Hint
-Integrating `TfidfVectorizer` (or `CountVectorizer`) into `ColumnTransformer` is key for handling text data within the Scikit-learn pipeline. Remember to include the raw text column in your `X` before the split, as `TfidfVectorizer` expects text input.
+Pay close attention to aggregating activities over time (pre-cutoff period) for each user and defining the multi-class target based on future activity levels. The SQL part requires careful handling of multiple activity types (posts and comments) for the 'days_since_last_activity' feature.
