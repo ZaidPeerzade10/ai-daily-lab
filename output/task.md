@@ -1,56 +1,50 @@
-# AI Daily Lab — 2026-02-25
+# AI Daily Lab — 2026-02-26
 
 ## Task
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `products_df`: With 100-200 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Apparel', 'Books', 'Home Goods'), `brand` (e.g., 'BrandX', 'BrandY', 'BrandZ', 'Generic'), `base_price` (random floats 20.0-500.0), `launch_date` (random dates over the last 3 years).
-    *   `sales_df`: With 4000-6000 rows. Columns: `sale_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random dates occurring *after* their respective `launch_date`), `quantity_sold` (random integers 1-10), `discount_applied_percent` (random floats 0.0-30.0, with a bias towards 0 for most sales, but occasional non-zero discounts).
-    *   **Simulate realistic sales patterns**: Ensure `sale_date` is always after `launch_date`. Bias `quantity_sold` such that products from certain `category`s or `brand`s tend to sell more. Discounts should generally lead to higher `quantity_sold` for that specific sale. Allow for products with no sales history, especially newer ones.
-
-2. **Load into SQLite & SQL Feature Engineering (Early Product Performance)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` into a table named `products` and `sales_df` into a table named `sales`. Determine a `global_analysis_date` (e.g., `max(sale_date)` from `sales_df` + 60 days, using pandas) and a `feature_cutoff_date` (`global_analysis_date` - 120 days).
-    Write a single SQL query that performs the following for *each product* (from `products` table), aggregating its sales behavior *before* the `feature_cutoff_date`:
-    *   **Joins** `products` and `sales` tables.
-    *   **Aggregates features based on sales *before* `feature_cutoff_date`**: 
-        *   `total_quantity_sold_pre_cutoff` (sum of `quantity_sold`)
-        *   `num_sales_events_pre_cutoff` (count of `sale_id`s)
-        *   `avg_discount_pre_cutoff` (average `discount_applied_percent`)
-        *   `num_unique_sale_days_pre_cutoff` (count of distinct `sale_date`s)
-        *   `days_since_first_sale_pre_cutoff`: Number of days between `feature_cutoff_date` and `MIN(sale_date)` for the product (only considering sales before `feature_cutoff_date`).
-    *   **Includes static product attributes**: `product_id`, `category`, `brand`, `base_price`, `launch_date`.
-    *   **Ensures** all products are included (using a `LEFT JOIN`), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_since_first_sale_pre_cutoff` if no sales before cutoff.
-    *   The query should return `product_id`, `category`, `brand`, `base_price`, `launch_date`, and all the aggregated features.
-    *   **Hint**: Use `strftime('%J', ...)` for Julian day differences to calculate days in SQLite, then convert to integer days for date differences.
-
-3. **Pandas Feature Engineering & Multi-Class Target Creation (Future Sales Performance)**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
-    *   Handle `NaN` values: Fill `total_quantity_sold_pre_cutoff`, `num_sales_events_pre_cutoff`, `num_unique_sale_days_pre_cutoff` with 0. Fill `avg_discount_pre_cutoff` with 0.0. For `days_since_first_sale_pre_cutoff` (for products with no sales before cutoff), fill with a large sentinel value (e.g., `product_age_at_cutoff_days` + 30).
-    *   Convert `launch_date` to datetime objects. Calculate `product_age_at_cutoff_days`: The number of days between `launch_date` and the `feature_cutoff_date`.
-    *   Calculate `sales_frequency_pre_cutoff`: `num_sales_events_pre_cutoff` / (`product_age_at_cutoff_days` + 1). Use `+1` to prevent division by zero for very new products at cutoff.
-    *   **Create the Multi-Class Target `future_sales_tier`**: Calculate `total_quantity_sold_future` (sum of `quantity_sold`) for each product from the *original* `sales_df` for sales occurring *between `feature_cutoff_date` and `global_analysis_date`*. Merge this aggregate with `product_features_df` (left join), filling `NaN`s with 0.
-        *   Calculate the 33rd and 66th percentiles for *non-zero* `total_quantity_sold_future`.
-        *   Define segments:
-            *   'No_Sales': `total_quantity_sold_future` == 0.
-            *   'Low_Sales': `total_quantity_sold_future` > 0 AND `total_quantity_sold_future` <= 33rd percentile.
-            *   'Medium_Sales': `total_quantity_sold_future` > 33rd percentile AND `total_quantity_sold_future` <= 66th percentile.
-            *   'High_Sales': `total_quantity_sold_future` > 66th percentile.
-    *   Define features `X` (all numerical: `base_price`, `product_age_at_cutoff_days`, `total_quantity_sold_pre_cutoff`, `num_sales_events_pre_cutoff`, `avg_discount_pre_cutoff`, `num_unique_sale_days_pre_cutoff`, `days_since_first_sale_pre_cutoff`, `sales_frequency_pre_cutoff`; categorical: `category`, `brand`) and target `y` (`future_sales_tier`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `future_sales_tier`:
-    *   A violin plot (or box plot) showing the distribution of `sales_frequency_pre_cutoff` for each `future_sales_tier`.
-    *   A stacked bar chart showing the proportion of `future_sales_tier` across different `brand` values.
-    Ensure plots have appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (e.g., `base_price`, `product_age_at_cutoff_days`, `total_quantity_sold_pre_cutoff`, `num_sales_events_pre_cutoff`, `avg_discount_pre_cutoff`, `num_unique_sale_days_pre_cutoff`, `days_since_first_sale_pre_cutoff`, `sales_frequency_pre_cutoff`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`category`, `brand`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.RandomForestClassifier` (set `random_state=42`, `n_estimators=100`, `class_weight='balanced'` for potential class imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `future_sales_tier` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Develop a machine learning pipeline to predict long-term user retention based on their initial onboarding behavior in an A/B test setting.
 
 ## Focus
-Predicting future product sales performance (multi-class classification) based on early sales metrics and static product attributes.
+SQL aggregation of time-windowed event data, Pandas for complex target creation and feature engineering, A/B test context, binary classification.
 
 ## Dataset
-Synthetic Product and Sales transaction data.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 2-3 years), `assigned_onboarding_variant` (e.g., 'Control', 'Variant_A', 'Variant_B'), `referral_source` (e.g., 'Organic', 'Paid_Ad', 'Referral').
+    *   `onboarding_events_df`: With 3000-5000 rows. Columns: `event_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `event_date` (random dates occurring *within 7 days* after their respective `signup_date`), `event_type` (e.g., 'step_1_completed', 'profile_filled', 'tutorial_viewed', 'payment_info_added', 'email_verified'), `duration_seconds` (random integers 10-300).
+    *   `future_activity_df`: With 2000-3000 rows. Columns: `activity_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `activity_date` (random dates occurring *between 30 and 90 days* after their respective `signup_date`), `activity_type` (e.g., 'login', 'feature_use_A', 'feature_use_B', 'content_view').
+    *   **Simulate realistic patterns**: Ensure `event_date` and `activity_date` are chronologically consistent with `signup_date`. Simulate that different `assigned_onboarding_variant`s impact onboarding event completion rates and `duration_seconds`. Users who complete more critical onboarding steps (e.g., 'profile_filled', 'payment_info_added') or spend more time on 'tutorial_viewed' should have a higher probability of having records in `future_activity_df`.
+
+2. **Load into SQLite & SQL Feature Engineering (Onboarding Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` and `onboarding_events_df` into tables named `users` and `onboarding_events` respectively.
+    Write a single SQL query that performs the following for *each user*, aggregating their onboarding event behavior *within the first 7 days* of their `signup_date`:
+    *   **Joins** `users` and `onboarding_events` tables.
+    *   **Aggregates features based on early onboarding activities**:
+        *   `num_onboarding_events`: Count of all onboarding `event_id`s within the 7-day window.
+        *   `total_onboarding_duration`: Sum of `duration_seconds` for all onboarding events.
+        *   `avg_step_duration`: Average `duration_seconds` per onboarding event.
+        *   `num_critical_steps_completed`: Count of `event_type`s 'profile_filled' OR 'payment_info_added' within the window.
+        *   `days_to_first_onboarding_event`: Number of days between `signup_date` and `MIN(event_date)` (only for events within the 7-day window). `NULL` if no events.
+        *   `onboarding_completion_rate`: `num_critical_steps_completed` / 2.0 (assuming 2 critical steps total, 0.0 if `num_critical_steps_completed` is 0).
+    *   **Includes static user attributes**: `user_id`, `signup_date`, `assigned_onboarding_variant`, `referral_source`.
+    *   **Ensures** all users from `users_df` are included (using a `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums, 0.0 for averages/rates, and `NULL` for `days_to_first_onboarding_event` if no onboarding events occurred within the window.
+    *   The query should return `user_id`, `signup_date`, `assigned_onboarding_variant`, `referral_source`, and all the aggregated features.
+    *   **Hint**: Use `strftime('%J', ...)` for Julian day differences to calculate days in SQLite, then convert to integer days for date differences.
+
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_onboarding_features_df`).
+    *   Handle `NaN` values: Fill `num_onboarding_events`, `total_onboarding_duration`, `num_critical_steps_completed` with 0. Fill `avg_step_duration`, `onboarding_completion_rate` with 0.0. For `days_to_first_onboarding_event` (for users with no onboarding activity), fill with a large sentinel value (e.g., 9999 days).
+    *   Convert `signup_date` to datetime objects.
+    *   **Create the Binary Target `is_retained_90_days`**: A user is considered `is_retained_90_days` (1) if they have *any* entry in the original `future_activity_df` where `activity_date` falls *between `signup_date + 30 days` and `signup_date + 90 days`*. Otherwise, 0. This requires processing `future_activity_df` separately and merging the result.
+    *   Define features `X` (numerical: `num_onboarding_events`, `total_onboarding_duration`, `avg_step_duration`, `num_critical_steps_completed`, `days_to_first_onboarding_event`, `onboarding_completion_rate`; categorical: `assigned_onboarding_variant`, `referral_source`) and target `y` (`is_retained_90_days`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_retained_90_days`:
+    *   A stacked bar chart showing the proportion of `is_retained_90_days` (0 or 1) across different `assigned_onboarding_variant` values. Include a clear title like '90-Day Retention Rate by Onboarding Variant'.
+    *   A violin plot (or box plot) showing the distribution of `total_onboarding_duration` for users with `is_retained_90_days=0` vs. `is_retained_90_days=1`. Ensure appropriate labels and titles.
+
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
+    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
+        *   For numerical features (`num_onboarding_events`, `total_onboarding_duration`, `avg_step_duration`, `num_critical_steps_completed`, `days_to_first_onboarding_event`, `onboarding_completion_rate`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features (`assigned_onboarding_variant`, `referral_source`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'`, `class_weight='balanced'` for potential class imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-For creating the `future_sales_tier` target, aggregate future sales separately. Then use `pd.qcut` (on non-zero sales) or `pd.cut` to define percentile-based tiers for 'Low', 'Medium', and 'High' sales, with a separate category for 'No_Sales'.
+Pay close attention to date comparisons in SQL for `event_date` filtering within the 7-day onboarding window and for `days_to_first_onboarding_event`. For the Pandas target creation, ensure you correctly define the future time window for activity. Remember to handle potential division by zero when calculating `onboarding_completion_rate` if `num_critical_steps_completed` is 0.
