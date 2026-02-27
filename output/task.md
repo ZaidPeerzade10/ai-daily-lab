@@ -1,50 +1,54 @@
-# AI Daily Lab — 2026-02-26
+# AI Daily Lab — 2026-02-27
 
 ## Task
-Develop a machine learning pipeline to predict long-term user retention based on their initial onboarding behavior in an A/B test setting.
-
-## Focus
-SQL aggregation of time-windowed event data, Pandas for complex target creation and feature engineering, A/B test context, binary classification.
-
-## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 2-3 years), `assigned_onboarding_variant` (e.g., 'Control', 'Variant_A', 'Variant_B'), `referral_source` (e.g., 'Organic', 'Paid_Ad', 'Referral').
-    *   `onboarding_events_df`: With 3000-5000 rows. Columns: `event_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `event_date` (random dates occurring *within 7 days* after their respective `signup_date`), `event_type` (e.g., 'step_1_completed', 'profile_filled', 'tutorial_viewed', 'payment_info_added', 'email_verified'), `duration_seconds` (random integers 10-300).
-    *   `future_activity_df`: With 2000-3000 rows. Columns: `activity_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `activity_date` (random dates occurring *between 30 and 90 days* after their respective `signup_date`), `activity_type` (e.g., 'login', 'feature_use_A', 'feature_use_B', 'content_view').
-    *   **Simulate realistic patterns**: Ensure `event_date` and `activity_date` are chronologically consistent with `signup_date`. Simulate that different `assigned_onboarding_variant`s impact onboarding event completion rates and `duration_seconds`. Users who complete more critical onboarding steps (e.g., 'profile_filled', 'payment_info_added') or spend more time on 'tutorial_viewed' should have a higher probability of having records in `future_activity_df`.
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `age` (random integers 18-70), `gender` (e.g., 'Male', 'Female', 'Other'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet'), `ad_blocker_enabled` (binary, 0 or 1).
+    *   `ads_df`: With 50-100 rows. Columns: `ad_id` (unique integers), `advertiser_category` (e.g., 'Finance', 'Gaming', 'Retail', 'Travel'), `ad_format` (e.g., 'Banner', 'Video', 'Native'), `target_audience_age_min` (random integers 18-50), `target_audience_age_max` (random integers 30-70, greater than `target_audience_age_min`).
+    *   `impressions_df`: With 5000-8000 rows. Columns: `impression_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `ad_id` (randomly sampled from `ads_df` IDs), `impression_date` (random dates occurring *after* their respective `signup_date`), `was_clicked` (binary, 0 or 1, representing the target).
+    *   **Simulate realistic CTR patterns**: Ensure `impression_date` is always after `signup_date`. Bias `was_clicked` (overall 2-5% CTR) such that:
+        *   Users with `ad_blocker_enabled=1` have significantly lower CTR.
+        *   Users whose `age` falls within the `target_audience_age_min/max` of the ad have a higher CTR.
+        *   Certain `advertiser_category`s (e.g., 'Gaming') or `ad_format`s (e.g., 'Video') might have generally higher CTRs.
+        *   Users with a history of prior clicks should have a slightly higher propensity to click again.
+        *   Sort `impressions_df` by `user_id` then `impression_date` for easier sequential processing.
 
-2. **Load into SQLite & SQL Feature Engineering (Onboarding Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` and `onboarding_events_df` into tables named `users` and `onboarding_events` respectively.
-    Write a single SQL query that performs the following for *each user*, aggregating their onboarding event behavior *within the first 7 days* of their `signup_date`:
-    *   **Joins** `users` and `onboarding_events` tables.
-    *   **Aggregates features based on early onboarding activities**:
-        *   `num_onboarding_events`: Count of all onboarding `event_id`s within the 7-day window.
-        *   `total_onboarding_duration`: Sum of `duration_seconds` for all onboarding events.
-        *   `avg_step_duration`: Average `duration_seconds` per onboarding event.
-        *   `num_critical_steps_completed`: Count of `event_type`s 'profile_filled' OR 'payment_info_added' within the window.
-        *   `days_to_first_onboarding_event`: Number of days between `signup_date` and `MIN(event_date)` (only for events within the 7-day window). `NULL` if no events.
-        *   `onboarding_completion_rate`: `num_critical_steps_completed` / 2.0 (assuming 2 critical steps total, 0.0 if `num_critical_steps_completed` is 0).
-    *   **Includes static user attributes**: `user_id`, `signup_date`, `assigned_onboarding_variant`, `referral_source`.
-    *   **Ensures** all users from `users_df` are included (using a `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums, 0.0 for averages/rates, and `NULL` for `days_to_first_onboarding_event` if no onboarding events occurred within the window.
-    *   The query should return `user_id`, `signup_date`, `assigned_onboarding_variant`, `referral_source`, and all the aggregated features.
-    *   **Hint**: Use `strftime('%J', ...)` for Julian day differences to calculate days in SQLite, then convert to integer days for date differences.
+2. **Load into SQLite & SQL Feature Engineering (Event-Level Context)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `ads_df`, and `impressions_df` into tables named `users`, `ads`, and `impressions` respectively.
+    Write a single SQL query that performs the following for *each impression event* in `impressions`:
+    *   **Joins** `users`, `ads`, and `impressions` tables.
+    *   **Calculates sequential features based on the user's *prior impressions* and the ad's *prior impressions* (excluding the current one), relative to the current `impression_date`**:
+        *   `user_prior_impressions`: Count of all *previous* impressions for the same user.
+        *   `user_prior_clicks`: Count of *previous* impressions that resulted in a click for the same user.
+        *   `user_prior_ctr`: `user_prior_clicks` / `user_prior_impressions` (0.0 if no prior impressions).
+        *   `days_since_last_user_click`: Number of days between the current `impression_date` and the user's *most recent prior click date*. If no prior click, use the number of days between `signup_date` and the current `impression_date`.
+        *   `ad_prior_impressions`: Count of all *previous* impressions for the same ad (across all users).
+        *   `ad_prior_clicks`: Count of *previous* impressions that resulted in a click for the same ad.
+        *   `ad_prior_ctr`: `ad_prior_clicks` / `ad_prior_impressions` (0.0 if no prior impressions).
+    *   **Includes static user and ad attributes**: `impression_id`, `user_id`, `ad_id`, `impression_date`, `was_clicked` (the target), `age`, `gender`, `device_type`, `ad_blocker_enabled`, `advertiser_category`, `ad_format`, `target_audience_age_min`, `target_audience_age_max`, `signup_date`.
+    *   The query should return all these attributes and engineered features.
 
-3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_onboarding_features_df`).
-    *   Handle `NaN` values: Fill `num_onboarding_events`, `total_onboarding_duration`, `num_critical_steps_completed` with 0. Fill `avg_step_duration`, `onboarding_completion_rate` with 0.0. For `days_to_first_onboarding_event` (for users with no onboarding activity), fill with a large sentinel value (e.g., 9999 days).
-    *   Convert `signup_date` to datetime objects.
-    *   **Create the Binary Target `is_retained_90_days`**: A user is considered `is_retained_90_days` (1) if they have *any* entry in the original `future_activity_df` where `activity_date` falls *between `signup_date + 30 days` and `signup_date + 90 days`*. Otherwise, 0. This requires processing `future_activity_df` separately and merging the result.
-    *   Define features `X` (numerical: `num_onboarding_events`, `total_onboarding_duration`, `avg_step_duration`, `num_critical_steps_completed`, `days_to_first_onboarding_event`, `onboarding_completion_rate`; categorical: `assigned_onboarding_variant`, `referral_source`) and target `y` (`is_retained_90_days`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`ad_features_df`).
+    *   Handle `NaN` values: Fill `user_prior_impressions`, `user_prior_clicks`, `ad_prior_impressions`, `ad_prior_clicks` with 0. Fill `user_prior_ctr` and `ad_prior_ctr` with 0.0. Ensure `days_since_last_user_click` is handled appropriately (SQL should mostly do this; if `NaN`s remain for first impressions/no prior clicks, fill with a large sentinel like 9999 days).
+    *   Convert `signup_date` and `impression_date` to datetime objects. Calculate `user_account_age_at_impression_days`: Days between `signup_date` and `impression_date`.
+    *   Create `is_user_in_target_audience`: A binary feature (1 if `age` falls within `target_audience_age_min` and `target_audience_age_max` for the respective ad, else 0).
+    *   Define features `X` (all numerical: `age`, `user_account_age_at_impression_days`, `user_prior_impressions`, `user_prior_clicks`, `user_prior_ctr`, `days_since_last_user_click`, `ad_prior_impressions`, `ad_prior_clicks`, `ad_prior_ctr`, `target_audience_age_min`, `target_audience_age_max`; categorical: `gender`, `device_type`, `ad_blocker_enabled`, `advertiser_category`, `ad_format`, `is_user_in_target_audience`) and target `y` (`was_clicked`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` to handle class imbalance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_retained_90_days`:
-    *   A stacked bar chart showing the proportion of `is_retained_90_days` (0 or 1) across different `assigned_onboarding_variant` values. Include a clear title like '90-Day Retention Rate by Onboarding Variant'.
-    *   A violin plot (or box plot) showing the distribution of `total_onboarding_duration` for users with `is_retained_90_days=0` vs. `is_retained_90_days=1`. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `was_clicked`:
+    *   A violin plot (or box plot) showing the distribution of `user_prior_ctr` for `was_clicked=0` vs. `was_clicked=1`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `was_clicked` (0 or 1) across different `ad_format` values. Ensure appropriate labels and titles.
 
 5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features (`num_onboarding_events`, `total_onboarding_duration`, `avg_step_duration`, `num_critical_steps_completed`, `days_to_first_onboarding_event`, `onboarding_completion_rate`): Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features (`assigned_onboarding_variant`, `referral_source`): Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.linear_model.LogisticRegression` (set `random_state=42`, `solver='liblinear'`, `class_weight='balanced'` for potential class imbalance).
+        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
     *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
+## Focus
+Ad Click-Through Rate (CTR) Prediction with Event-Level Contextual Features
+
+## Dataset
+Synthetic user demographics, ad characteristics, and ad impression/click logs.
+
 ## Hint
-Pay close attention to date comparisons in SQL for `event_date` filtering within the 7-day onboarding window and for `days_to_first_onboarding_event`. For the Pandas target creation, ensure you correctly define the future time window for activity. Remember to handle potential division by zero when calculating `onboarding_completion_rate` if `num_critical_steps_completed` is 0.
+Pay special attention to engineering *sequential, event-level features* in SQL using window functions (e.g., `COUNT(*) OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)` for prior aggregates, and `LAG()` for `days_since_last_user_click`). Remember to coalesce `LAG` results with appropriate fallback values for a user's first impression/click.
