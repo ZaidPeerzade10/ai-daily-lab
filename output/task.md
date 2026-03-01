@@ -1,38 +1,45 @@
-# AI Daily Lab — 2026-02-28
+# AI Daily Lab — 2026-03-01
 
 ## Task
+Develop a machine learning pipeline to predict the likelihood of a positive user-product interaction (e.g., add to cart, purchase) given historical user behavior and product attributes.
+
+## Focus
+Predicting user-product interaction outcome (binary classification) using event-level feature engineering, sequential features, and static attributes.
+
+## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `user_segment` (e.g., 'New', 'Regular', 'VIP'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet').
-    *   `sessions_df`: With 3000-5000 rows. Columns: `session_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `session_start_date` (random dates *after* respective `signup_date`), `session_duration_seconds` (random integers 30-1800, i.e., 0.5 to 30 minutes).
-    *   `events_df`: With 10000-15000 rows. Columns: `event_id` (unique integers), `session_id` (randomly sampled from `sessions_df` IDs), `event_timestamp` (random timestamps within respective `session_start_date` and `session_duration_seconds`), `event_type` (e.g., 'page_view', 'add_to_cart', 'checkout', 'search', 'filter'), `event_value` (random floats 0-100, for 'add_to_cart' or 'checkout').
-    *   **Simulate realistic patterns**: Ensure `session_start_date` is after `signup_date` and `event_timestamp` is within the session's start and end. Define a `is_high_value_session` target (binary, 0 or 1) for each `sessions_df` row. Simulate that sessions with more 'add_to_cart'/'checkout' events, longer `session_duration_seconds`, or from 'VIP' `user_segment` are more likely to be `is_high_value_session=1` (e.g., 10-20% of sessions). Some sessions might have no events.
-    
-2. **Load into SQLite & SQL Feature Engineering (Session Behavior Aggregation)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `sessions_df`, and `events_df` into tables named `users`, `sessions`, and `events` respectively.
-    Write a single SQL query that performs the following for *each session* (from `sessions` table), aggregating its event behavior:
-    *   **Joins** `users`, `sessions`, and `events` tables.
-    *   **Aggregates features based on events within each session**:
-        *   `num_events_in_session` (count of all events)
-        *   `num_page_views` (count of 'page_view' `event_type`)
-        *   `num_add_to_carts` (count of 'add_to_cart' `event_type`)
-        *   `num_checkouts` (count of 'checkout' `event_type`)
-        *   `total_event_value` (sum of `event_value`)
-        *   `time_to_first_event_seconds`: Number of seconds between `session_start_date` and `MIN(event_timestamp)` for the session.
-        *   `time_to_last_event_seconds`: Number of seconds between `session_start_date` and `MAX(event_timestamp)` for the session.
-    *   **Includes static session and user attributes**: `session_id`, `user_id`, `session_start_date`, `session_duration_seconds`, `user_segment`, `device_type`, `is_high_value_session` (the target).
-    *   **Ensures** all sessions are included (using `LEFT JOIN`), showing 0 for counts/sums, and `NULL` for `time_to_first_event_seconds`/`time_to_last_event_seconds` if no events.
-    *   The query should return `session_id`, `user_id`, `session_start_date`, `session_duration_seconds`, `user_segment`, `device_type`, `is_high_value_session`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` or `strftime('%s', ...)` for time differences in SQLite (seconds).
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `subscription_level` (e.g., 'Free', 'Basic', 'Premium').
+    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Apparel', 'HomeGoods'), `price` (random floats 10.0-1000.0), `avg_rating` (random floats 2.5-5.0), `launch_date` (random dates over the last 3 years).
+    *   `interactions_df`: With 5000-8000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates occurring *after* respective `signup_date` and `launch_date`), `interaction_type` (e.g., 'view', 'add_to_cart', 'purchase', 'review'), `is_positive_interaction` (binary target, 0 for 'view', 1 for 'add_to_cart'/'purchase'/'review').
+    *   **Simulate realistic patterns**: Ensure `interaction_date` is always after `signup_date` and `launch_date`. Bias `is_positive_interaction` (overall 10-20% positive rate) such that:
+        *   Users with 'Premium' `subscription_level` have a higher chance of positive interactions.
+        *   Products with higher `avg_rating` or lower `price` tend to have more positive interactions.
+        *   A user's `is_positive_interaction` on a product should correlate with their past overall positive interaction rate.
+        *   Sort `interactions_df` by `user_id` then `interaction_date` for easier sequential processing.
 
-3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`session_features_df`).
-    *   Handle `NaN` values: Fill `num_events_in_session`, `num_page_views`, `num_add_to_carts`, `num_checkouts` with 0. Fill `total_event_value` with 0.0. For `time_to_first_event_seconds` (sessions with no events), fill with `session_duration_seconds` (or a large sentinel). For `time_to_last_event_seconds` (sessions with no events), fill with `0.0`.
-    *   Calculate `event_density_per_second`: `num_events_in_session` / (`session_duration_seconds` + 1). Use `+1` to prevent division by zero.
-    *   Calculate `checkout_rate_in_session`: `num_checkouts` / (`num_add_to_carts` + 1). Use `+1` to prevent division by zero.
-    *   Define features `X` (all numerical: `session_duration_seconds`, `num_events_in_session`, `num_page_views`, `num_add_to_carts`, `num_checkouts`, `total_event_value`, `time_to_first_event_seconds`, `time_to_last_event_seconds`, `event_density_per_second`, `checkout_rate_in_session`; categorical: `user_segment`, `device_type`) and target `y` (`is_high_value_session`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+2. **Load into SQLite & SQL Feature Engineering (Event-Level Context)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `interactions_df` into tables named `users`, `products`, and `interactions` respectively.
+    Write a single SQL query that performs the following for *each interaction event* in `interactions`:
+    *   **Joins** `users`, `products`, and `interactions` tables.
+    *   **Calculates sequential features based on the user's *prior interactions* and the product's *prior interactions* (excluding the current one), relative to the current `interaction_date`**:
+        *   `user_prior_total_interactions`: Count of all *previous* interactions for the same user.
+        *   `user_prior_positive_interactions`: Count of *previous* interactions that were positive (`is_positive_interaction=1`) for the same user.
+        *   `user_prior_positive_interaction_rate`: `user_prior_positive_interactions` / `user_prior_total_interactions` (0.0 if no prior interactions).
+        *   `days_since_last_user_interaction`: Number of days between the current `interaction_date` and the user's *most recent prior* `interaction_date`. If it's the user's first interaction, use the number of days between `signup_date` and `interaction_date`.
+        *   `product_prior_total_interactions`: Count of all *previous* interactions for the same product (across all users).
+        *   `product_prior_positive_interactions`: Count of *previous* interactions that were positive (`is_positive_interaction=1`) for the same product.
+        *   `product_prior_positive_interaction_rate`: `product_prior_positive_interactions` / `product_prior_total_interactions` (0.0 if no prior interactions).
+    *   **Includes static user and product attributes**: `interaction_id`, `user_id`, `product_id`, `interaction_date`, `is_positive_interaction` (the target), `region`, `subscription_level`, `category`, `price`, `avg_rating`, `signup_date`, `launch_date`.
+    *   The query should return all these attributes and engineered features.
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_high_value_session`:
-    *   A violin plot (or box plot) showing the distribution of `session_duration_seconds` for `is_high_value_session=0` vs. `is_high_value_session=1`.
-    *   A stacked bar chart showing the proportion of `is_high_value_session` (0 or 1) across different `user_segment` values.
-    Ensure plots have appropriate labels and titles.
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_product_features_df`).
+    *   Handle `NaN` values: Fill `user_prior_total_interactions`, `user_prior_positive_interactions`, `product_prior_total_interactions`, `product_prior_positive_interactions` with 0. Fill `user_prior_positive_interaction_rate` and `product_prior_positive_interaction_rate` with 0.0. Ensure `days_since_last_user_interaction` is handled appropriately (SQL should mostly do this; if `NaN`s remain for first interactions, fill with a large sentinel like 9999 days).
+    *   Convert `signup_date`, `launch_date`, and `interaction_date` to datetime objects. Calculate `user_account_age_at_interaction_days`: Days between `signup_date` and `interaction_date`. Calculate `product_age_at_interaction_days`: Days between `launch_date` and `interaction_date`.
+    *   Create `user_had_prior_positive_interaction`: A binary feature (1 if `user_prior_positive_interactions > 0`, else 0).
+    *   Define features `X` (all numerical: `price`, `avg_rating`, `user_account_age_at_interaction_days`, `product_age_at_interaction_days`, `user_prior_total_interactions`, `user_prior_positive_interactions`, `user_prior_positive_interaction_rate`, `days_since_last_user_interaction`, `product_prior_total_interactions`, `product_prior_positive_interactions`, `product_prior_positive_interaction_rate`; categorical: `region`, `subscription_level`, `category`, `user_had_prior_positive_interaction`) and target `y` (`is_positive_interaction`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` to handle class imbalance).
+
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_positive_interaction`:
+    *   A violin plot (or box plot) showing the distribution of `avg_rating` for `is_positive_interaction=0` vs. `is_positive_interaction=1`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_positive_interaction` (0 or 1) across different `category` values. Ensure appropriate labels and titles.
 
 5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
@@ -42,11 +49,5 @@
     *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
-## Focus
-Predicting high-value user sessions based on in-session behavior and user attributes. This task emphasizes session-level analytics and aggregation of granular event data to derive actionable features for binary classification.
-
-## Dataset
-Synthetic data simulating user sessions and events on a platform, combined with user demographics. DataFrames: `users_df`, `sessions_df`, `events_df`.
-
 ## Hint
-For SQL time differences, `CAST((julianday(MAX(e.event_timestamp)) - julianday(s.session_start_date)) * 24 * 60 * 60 AS INTEGER)` will give seconds. Remember to use `LEFT JOIN` from `sessions` to `events` aggregated subquery to include sessions with no events.
+For sequential SQL features, carefully use `LAG()` for previous dates and `SUM() OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)` for cumulative sums/counts. Remember to handle division by zero for rates and `NULL` values for `LAG()` results. Convert dates to Julian days for subtraction in SQLite to get day differences.
