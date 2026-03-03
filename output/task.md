@@ -1,13 +1,52 @@
-# AI Daily Lab — 2026-03-02
+# AI Daily Lab — 2026-03-03
 
 ## Task
-Develop a machine learning pipeline to predict customer churn based on their recent activity and static profile information.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `age` (random integers 18-70), `region` (e.g., 'North', 'South', 'East', 'West').
+    *   `transactions_df`: With 8000-12000 rows. Columns: `transaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs, ensuring some users have many transactions), `transaction_date` (random timestamps occurring *after* their respective `signup_date`), `amount` (random floats between 10.0 and 5000.0), `merchant_category` (e.g., 'Groceries', 'Retail', 'Dining', 'Travel', 'Online_Service'), `location_country` (e.g., 'USA', 'Canada', 'UK', 'Mexico', 'Japan'). Generate a hidden `is_fraudulent` (binary, 0 or 1) *for each transaction*, with an approximate 1-3% fraud rate overall.
+    *   **Simulate realistic fraud patterns**: Ensure `transaction_date` is always after `signup_date`. For fraudulent transactions (`is_fraudulent=1`), simulate patterns like:
+        *   Higher `amount`s or suspiciously large `amount`s.
+        *   Often occurring in rapid succession (e.g., multiple transactions within minutes or hours) for the same user, especially if `location_country` changes rapidly.
+        *   Potentially concentrated shortly after `signup_date` for some users, or after a long period of inactivity. Non-fraudulent transactions should show more typical, spread-out patterns.
+    *   Sort `transactions_df` by `user_id` then `transaction_date` for easier sequential processing.
+
+2. **Load into SQLite & SQL Feature Engineering (Event-Level Transaction Patterns)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` into a table named `users` and `transactions_df` into a table named `transactions`.
+    Write a single SQL query that performs the following for *each transaction* in `transactions`:
+    *   **Joins** `users` and `transactions` tables.
+    *   **Calculates sequential features based on the user's *prior transactions* (excluding the current one), relative to the current `transaction_date`**:
+        *   `user_prior_num_transactions_30d`: Count of all *previous* transactions for the same user in the last 30 days leading up to the current `transaction_date`.
+        *   `user_prior_total_spend_30d`: Sum of `amount` for all *previous* transactions for the same user in the last 30 days.
+        *   `user_avg_amount_last_5_tx`: Average `amount` of the user's *last 5 prior transactions*. (Use `NULL` if less than 5).
+        *   `days_since_last_user_transaction`: Number of days between the current `transaction_date` and the user's *most recent prior* `transaction_date`. If it's the user's first transaction, use the number of days between `signup_date` and the current `transaction_date`.
+        *   `user_num_unique_countries_last_5_tx`: Count of distinct `location_country` for the user's *last 5 prior transactions*.
+    *   **Includes static user and current transaction attributes**: `transaction_id`, `user_id`, `transaction_date`, `amount`, `merchant_category`, `location_country`, `is_fraudulent` (the target), `age`, `region`, `signup_date`.
+    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
+    *   **Hint**: Use window functions with `ORDER BY transaction_date ROWS BETWEEN ... PRECEDING` for rolling aggregates. For `days_since_last_user_transaction`, use `LAG` with `COALESCE` and `julianday` differences.
+
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`transaction_features_df`).
+    *   Handle `NaN` values: Fill `user_prior_num_transactions_30d`, `user_prior_total_spend_30d`, `user_num_unique_countries_last_5_tx` with 0. Fill `user_avg_amount_last_5_tx` with the global average of `amount` or a suitable default (e.g., 0.0 if no prior activity). For `days_since_last_user_transaction` (for a user's first transaction), SQL should handle, but if any `NaN`s remain, fill with the `user_account_age_at_transaction_days`.
+    *   Convert `signup_date` and `transaction_date` to datetime objects. Calculate `user_account_age_at_transaction_days`: Days between `signup_date` and `transaction_date`.
+    *   Calculate `amount_to_avg_prior_ratio`: `amount` / (`user_avg_amount_last_5_tx` if `user_avg_amount_last_5_tx` > 0 else 1.0). Fill any remaining `NaN` or `inf` with 0 or a large sentinel.
+    *   Calculate `transaction_velocity_30d`: `user_prior_num_transactions_30d` / (`days_since_last_user_transaction` + 1). Fill any remaining `NaN` or `inf` with 0.
+    *   Define features `X` (all numerical: `amount`, `age`, `user_account_age_at_transaction_days`, `user_prior_num_transactions_30d`, `user_prior_total_spend_30d`, `user_avg_amount_last_5_tx`, `days_since_last_user_transaction`, `user_num_unique_countries_last_5_tx`, `amount_to_avg_prior_ratio`, `transaction_velocity_30d`; categorical: `region`, `merchant_category`, `location_country`) and target `y` (`is_fraudulent`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance due to low fraud rate).
+
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_fraudulent`:
+    *   A violin plot (or box plot) showing the distribution of `amount` for `is_fraudulent=0` vs. `is_fraudulent=1`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_fraudulent` (0 or 1) across different `location_country` values. Ensure appropriate labels and titles.
+
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
+    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
+        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Predicting customer churn (binary classification) using aggregated historical usage patterns and user demographics, featuring advanced SQL analytics for time-windowed feature engineering.
+Transaction-level Fraud Detection using Sequential User Behavioral Features
 
 ## Dataset
-Simulate a subscription service with customer profiles and usage events.
+Synthetic transaction data with per-transaction fraud labels.
 
 ## Hint
-When generating `usage_events_df` for churned users, ensure their activity stops before a simulated `churn_date`. For SQL aggregation, carefully define `feature_cutoff_date` and `global_analysis_date`. In Pandas, when creating the `is_churned` target, define a `churn_observation_period` (e.g., 90 days after `feature_cutoff_date`) and mark users as churned if their `churn_date` (simulated in step 1) falls within this observation period. For non-churned users, ensure their simulated `churn_date` is either non-existent or far in the future.
+Pay close attention to the SQL window functions for defining the 'prior' periods and transactions. Use `strftime('%J', ...)` to calculate day differences and `strftime('%s', ...)` for second differences in SQLite for accurate time-based windows. For the average of the last N transactions, you'll need to use `ROWS BETWEEN N PRECEDING AND 1 PRECEDING` and handle the `NULL`s for early transactions in both SQL and Pandas.
