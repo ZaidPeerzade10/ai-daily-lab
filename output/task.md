@@ -1,59 +1,61 @@
-# AI Daily Lab — 2026-03-16
+# AI Daily Lab — 2026-03-17
 
 ## Task
+Develop a machine learning pipeline to predict the success tier of new product launches based on early user interaction metrics and product attributes.
+
+## Focus
+Product launch success prediction (multi-class classification) using initial user engagement and product characteristics.
+
+## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `acquisition_channel` (e.g., 'Organic', 'Paid_Social', 'Referral', 'Direct'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet').
-    *   `sessions_df`: With 8000-12000 rows. Columns: `session_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `session_start_time` (random timestamps occurring *after* their respective `signup_date`), `session_duration_seconds` (random integers 30-1800), `num_page_views` (random integers 1-50).
-    *   `page_views_df`: With 25000-40000 rows. Columns: `page_view_id` (unique integers), `session_id` (randomly sampled from `sessions_df` IDs), `page_url_category` (e.g., 'Homepage', 'Product_Page', 'Category_Page', 'Cart_Page', 'Checkout_Page', 'Help_Page', 'Blog'), `view_time_seconds` (random integers 5-300).
-    *   **Simulate realistic retention patterns**: Ensure `session_start_time` is after `signup_date`. Bias the data such that users who eventually get 'retained' (see step 3 for target definition) generally exhibit:
-        *   Higher `session_duration_seconds` and `num_page_views` in their initial sessions.
-        *   More frequent viewing of 'Product_Page' or 'Cart_Page' in their initial sessions.
-        *   Fewer 'Help_Page' visits for longer durations, or fewer 'Homepage' visits with no further navigation in their initial sessions.
-        *   Certain `acquisition_channel`s (e.g., 'Referral') or `device_type`s (e.g., 'Desktop') might have higher initial engagement leading to retention.
-    *   Sort `sessions_df` by `user_id` then `session_start_time` and `page_views_df` by `session_id` then `view_time_seconds` for easier sequential processing.
+    *   `products_df`: With 100-200 rows. Columns: `product_id` (unique integers), `launch_date` (random dates over the last 3 years), `category` (e.g., 'Electronics', 'Software', 'Apparel', 'HomeGoods'), `initial_price` (random floats 20.0-5000.0), `marketing_spend_at_launch` (random floats 1000.0-50000.0).
+    *   `user_interactions_df`: With 10000-15000 rows. Columns: `interaction_id` (unique integers), `user_id` (random integers, representing different users for different products), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates occurring *after* their respective `launch_date` and *within the first 14 days* of product launch), `interaction_type` (e.g., 'View', 'Add_to_Cart', 'Wishlist', 'Share'), `duration_seconds` (random floats 5-600, primarily for 'View' interactions, 0 for others).
+    *   `sales_df`: With 1000-2000 rows. Columns: `sale_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random dates occurring *after* `launch_date` and *within the first 60 days* of product launch), `quantity_sold` (random integers 1-10).
+    *   **Simulate realistic patterns**: Ensure `interaction_date` is after `launch_date` and within the 14-day window. `sale_date` is after `launch_date` and within the 60-day window. Bias data such that:
+        *   Products with higher `marketing_spend_at_launch` tend to have more `View` interactions.
+        *   Products with more early `Add_to_Cart` or `Wishlist` interactions are more likely to have higher `quantity_sold` in the first 60 days.
+        *   Some `category` types might naturally have higher or lower sales. Longer `duration_seconds` for 'View' can indicate higher user interest.
 
-2. **Load into SQLite & SQL Feature Engineering (User Initial Web Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `sessions_df`, and `page_views_df` into tables named `users`, `sessions`, and `page_views` respectively. For each user, define their `initial_behavior_cutoff_date` as `signup_date + 7 days`.
-    Write a single SQL query that performs the following for *each user*, aggregating their session and page view behavior *within their first 7 days post-signup* (i.e., `session_start_time` before or on `initial_behavior_cutoff_date`):
-    *   **Joins** `users` with aggregated subqueries for `sessions` and `page_views` (via `sessions`).
-    *   **Aggregates features based on activities *within the first 7 days* post-signup**:
-        *   `num_sessions_first_7d` (count of `session_id`s)
-        *   `total_session_duration_first_7d` (sum of `session_duration_seconds`)
-        *   `avg_session_duration_first_7d` (average `session_duration_seconds`)
-        *   `total_page_views_first_7d` (sum of `num_page_views` from `sessions`, or total count of `page_view_id`s from `page_views`)
-        *   `num_product_page_views_first_7d` (count of `page_url_category = 'Product_Page'`)
-        *   `num_cart_page_views_first_7d` (count of `page_url_category = 'Cart_Page'`)
-        *   `days_with_activity_first_7d` (count of distinct dates from `session_start_time`)
-        *   `avg_page_views_per_session_first_7d` (average `num_page_views` from `sessions`)
-    *   **Includes static user attributes**: `user_id`, `signup_date`, `acquisition_channel`, `device_type`.
-    *   **Ensures** all users are included (using `LEFT JOIN`s to aggregated subqueries), showing 0 for counts/sums, and 0.0 for averages if no activity in the first 7 days.
-    *   The query should return `user_id`, `signup_date`, `acquisition_channel`, `device_type`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date differences for filtering. For `days_with_activity_first_7d`, extract the date part of `session_start_time`.
+2. **Load into SQLite & SQL Feature Engineering (Product-Level Early Performance)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` and `user_interactions_df` into tables named `products` and `user_interactions` respectively. For each product, define its `initial_interaction_cutoff_date` as `launch_date + 14 days`.
+    Write a single SQL query that performs the following for *each product*, aggregating its user interaction behavior *within its first 14 days post-launch* (i.e., `interaction_date` before or on `initial_interaction_cutoff_date`):
+    *   **Joins** `products` with aggregated subqueries for `user_interactions`.
+    *   **Aggregates features based on interactions *within the first 14 days* post-launch**:
+        *   `total_views_first_14d` (count of `interaction_type = 'View'`)
+        *   `total_add_to_cart_first_14d` (count of `interaction_type = 'Add_to_Cart'`)
+        *   `total_wishlist_first_14d` (count of `interaction_type = 'Wishlist'`)
+        *   `avg_view_duration_first_14d` (average `duration_seconds` for 'View' interactions)
+        *   `num_unique_users_interacting_first_14d` (count of distinct `user_id`s)
+        *   `days_from_launch_to_first_interaction`: Number of days between `launch_date` and `MIN(interaction_date)` for the product. `NULL` if no interactions.
+    *   **Includes static product attributes**: `product_id`, `launch_date`, `category`, `initial_price`, `marketing_spend_at_launch`.
+    *   **Ensures** all products are included (using `LEFT JOIN`s to aggregated subqueries), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_from_launch_to_first_interaction` if no interactions in the first 14 days.
+    *   The query should return `product_id`, `launch_date`, `category`, `initial_price`, `marketing_spend_at_launch`, and all the aggregated features.
+    *   **Hint**: Use `julianday()` for date differences for filtering. Filter interactions based on `i.interaction_date BETWEEN p.launch_date AND DATE(p.launch_date, '+14 days')`.
 
-3. **Pandas Feature Engineering & Binary Target Creation (User Retention)**: Fetch the SQL query results into a pandas DataFrame (`user_initial_features_df`).
-    *   Handle `NaN` values: Fill `num_sessions_first_7d`, `total_session_duration_first_7d`, `total_page_views_first_7d`, `num_product_page_views_first_7d`, `num_cart_page_views_first_7d`, `days_with_activity_first_7d` with 0. Fill `avg_session_duration_first_7d` and `avg_page_views_per_session_first_7d` with 0.0.
-    *   Convert `signup_date` to datetime objects. Calculate `account_age_at_cutoff_days`: The number of days between `signup_date` and the `initial_behavior_cutoff_date` (which is always 7 days).
-    *   Calculate `engagement_ratio_first_7d`: (`num_product_page_views_first_7d` + `num_cart_page_views_first_7d`) / (`total_page_views_first_7d` + 1). Use `+1` to prevent division by zero.
-    *   Calculate `session_frequency_first_7d`: `num_sessions_first_7d` / 7.0.
-    *   **Create the Binary Target `is_retained_after_30_days`**: For each user, define their `retention_start_date` as `signup_date + 30 days` and `retention_end_date` as `signup_date + 90 days`. Check the *original* `sessions_df` for any session where `session_start_time` falls *between* `retention_start_date` and `retention_end_date`. Assign `1` if at least one such session exists, otherwise `0`. Perform a left merge, filling `NaN`s from the merge with 0.
-    *   Define features `X` (all numerical: `num_sessions_first_7d`, `total_session_duration_first_7d`, `avg_session_duration_first_7d`, `total_page_views_first_7d`, `num_product_page_views_first_7d`, `num_cart_page_views_first_7d`, `days_with_activity_first_7d`, `avg_page_views_per_session_first_7d`, `account_age_at_cutoff_days`, `engagement_ratio_first_7d`, `session_frequency_first_7d`; categorical: `acquisition_channel`, `device_type`) and target `y` (`is_retained_after_30_days`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance due to potential retention rate).
+3. **Pandas Feature Engineering & Multi-Class Target Creation (Product Success Tier)**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
+    *   Handle `NaN` values: Fill `total_views_first_14d`, `total_add_to_cart_first_14d`, `total_wishlist_first_14d`, `num_unique_users_interacting_first_14d` with 0. Fill `avg_view_duration_first_14d` with 0.0. For `days_from_launch_to_first_interaction` (for products with no interactions in the first 14 days), fill with 14 (representing activity started on day 14, or no activity).
+    *   Convert `launch_date` to datetime objects.
+    *   Calculate `total_interactions_first_14d`: Sum of all interaction counts.
+    *   Calculate `interaction_frequency_per_day_first_14d`: `total_interactions_first_14d` / 14.0. Fill any `NaN`s with 0.
+    *   **Create the Multi-Class Target `product_success_tier`**: Calculate `total_sales_in_first_60d` (sum of `quantity_sold`) for each `product_id` from the *original* `sales_df` for sales occurring *after* `launch_date` and *within 60 days* of `launch_date`. Merge this aggregate with `product_features_df` (left join), filling `NaN`s with 0 for products with no sales.
+        *   Calculate the 33rd and 66th percentiles for *non-zero* `total_sales_in_first_60d`.
+        *   Define segments:
+            *   'Low_Success': `total_sales_in_first_60d` == 0.
+            *   'Medium_Success': `total_sales_in_first_60d` > 0 AND `total_sales_in_first_60d` <= 33rd percentile.
+            *   'High_Success': `total_sales_in_first_60d` > 33rd percentile AND `total_sales_in_first_60d` <= 66th percentile.
+            *   'Very_High_Success': `total_sales_in_first_60d` > 66th percentile.
+    *   Define features `X` (all numerical: `initial_price`, `marketing_spend_at_launch`, `total_views_first_14d`, `total_add_to_cart_first_14d`, `total_wishlist_first_14d`, `avg_view_duration_first_14d`, `num_unique_users_interacting_first_14d`, `days_from_launch_to_first_interaction`, `total_interactions_first_14d`, `interaction_frequency_per_day_first_14d`; categorical: `category`) and target `y` (`product_success_tier`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_retained_after_30_days`:
-    *   A violin plot (or box plot) showing the distribution of `total_session_duration_first_7d` for non-retained (0) vs. retained (1) users. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_retained_after_30_days` (0 or 1) across different `acquisition_channel` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `product_success_tier`:
+    *   A violin plot (or box plot) showing the distribution of `total_add_to_cart_first_14d` for each `product_success_tier`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `product_success_tier` across different `category` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Binary Classification)**: 
+5. **ML Pipeline & Evaluation (Multi-Class)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
     *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
-
-## Focus
-Predicting user retention based on early website session and page view behavior using a time-windowed feature engineering approach.
-
-## Dataset
-Synthetic user profiles, website sessions, and granular page view logs.
+    *   Train the pipeline on `X_train`, `y_train`. Predict `product_success_tier` for `X_test`.
+    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-For SQL aggregates, remember to filter both the `sessions` and `page_views` subqueries based on the `initial_behavior_cutoff_date` for each user. When creating the `is_retained_after_30_days` target in Pandas, ensure you correctly join/merge the aggregated `sessions_df` information for the retention window back to your `user_initial_features_df`.
+When simulating data, create clear patterns between early interactions (e.g., 'Add_to_Cart') and later sales to make the target predictable. For SQL, ensure `LEFT JOIN`s are used to retain all products, even those with no early interactions. When defining the target tiers in Pandas, remember to calculate percentiles only on *non-zero* sales values to avoid skewing low-engagement products.
