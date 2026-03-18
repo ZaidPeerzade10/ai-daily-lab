@@ -1,61 +1,52 @@
-# AI Daily Lab — 2026-03-17
+# AI Daily Lab — 2026-03-18
 
 ## Task
-Develop a machine learning pipeline to predict the success tier of new product launches based on early user interaction metrics and product attributes.
-
-## Focus
-Product launch success prediction (multi-class classification) using initial user engagement and product characteristics.
-
-## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `products_df`: With 100-200 rows. Columns: `product_id` (unique integers), `launch_date` (random dates over the last 3 years), `category` (e.g., 'Electronics', 'Software', 'Apparel', 'HomeGoods'), `initial_price` (random floats 20.0-5000.0), `marketing_spend_at_launch` (random floats 1000.0-50000.0).
-    *   `user_interactions_df`: With 10000-15000 rows. Columns: `interaction_id` (unique integers), `user_id` (random integers, representing different users for different products), `product_id` (randomly sampled from `products_df` IDs), `interaction_date` (random dates occurring *after* their respective `launch_date` and *within the first 14 days* of product launch), `interaction_type` (e.g., 'View', 'Add_to_Cart', 'Wishlist', 'Share'), `duration_seconds` (random floats 5-600, primarily for 'View' interactions, 0 for others).
-    *   `sales_df`: With 1000-2000 rows. Columns: `sale_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random dates occurring *after* `launch_date` and *within the first 60 days* of product launch), `quantity_sold` (random integers 1-10).
-    *   **Simulate realistic patterns**: Ensure `interaction_date` is after `launch_date` and within the 14-day window. `sale_date` is after `launch_date` and within the 60-day window. Bias data such that:
-        *   Products with higher `marketing_spend_at_launch` tend to have more `View` interactions.
-        *   Products with more early `Add_to_Cart` or `Wishlist` interactions are more likely to have higher `quantity_sold` in the first 60 days.
-        *   Some `category` types might naturally have higher or lower sales. Longer `duration_seconds` for 'View' can indicate higher user interest.
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `segment` (e.g., 'Budget', 'Standard', 'Premium'), `avg_annual_income` (random integers 30000-200000).
+    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Home Goods', 'Apparel', 'Services'), `unit_price` (random floats 10.0-1000.0), `release_date` (random dates over the last 4 years).
+    *   `purchases_df`: With 8000-12000 rows. Columns: `purchase_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `purchase_date` (random dates occurring *after* their respective `signup_date` and *after* the `product_id`'s `release_date`), `quantity` (random integers 1-5).
+    *   Calculate `amount` for each purchase (`quantity * unit_price` from `products_df`).
+    *   **Simulate realistic patterns**: Ensure `purchase_date` is always after `signup_date` and `release_date`. Bias the data such that 'Premium' segment users and users with higher `avg_annual_income` tend to have higher `amount`s. Some `category`s (e.g., 'Electronics') should have higher average `unit_price`. Users often make repeat purchases of certain `category`s. Ensure that for most users, there is at least one subsequent purchase to define a target.
+    *   Sort `purchases_df` by `user_id` then `purchase_date` for easier sequential processing.
 
-2. **Load into SQLite & SQL Feature Engineering (Product-Level Early Performance)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` and `user_interactions_df` into tables named `products` and `user_interactions` respectively. For each product, define its `initial_interaction_cutoff_date` as `launch_date + 14 days`.
-    Write a single SQL query that performs the following for *each product*, aggregating its user interaction behavior *within its first 14 days post-launch* (i.e., `interaction_date` before or on `initial_interaction_cutoff_date`):
-    *   **Joins** `products` with aggregated subqueries for `user_interactions`.
-    *   **Aggregates features based on interactions *within the first 14 days* post-launch**:
-        *   `total_views_first_14d` (count of `interaction_type = 'View'`)
-        *   `total_add_to_cart_first_14d` (count of `interaction_type = 'Add_to_Cart'`)
-        *   `total_wishlist_first_14d` (count of `interaction_type = 'Wishlist'`)
-        *   `avg_view_duration_first_14d` (average `duration_seconds` for 'View' interactions)
-        *   `num_unique_users_interacting_first_14d` (count of distinct `user_id`s)
-        *   `days_from_launch_to_first_interaction`: Number of days between `launch_date` and `MIN(interaction_date)` for the product. `NULL` if no interactions.
-    *   **Includes static product attributes**: `product_id`, `launch_date`, `category`, `initial_price`, `marketing_spend_at_launch`.
-    *   **Ensures** all products are included (using `LEFT JOIN`s to aggregated subqueries), showing 0 for counts/sums, 0.0 for averages, and `NULL` for `days_from_launch_to_first_interaction` if no interactions in the first 14 days.
-    *   The query should return `product_id`, `launch_date`, `category`, `initial_price`, `marketing_spend_at_launch`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date differences for filtering. Filter interactions based on `i.interaction_date BETWEEN p.launch_date AND DATE(p.launch_date, '+14 days')`.
+2. **Load into SQLite & SQL Feature Engineering (Predicting Next Purchase Amount)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `purchases_df` into tables named `users`, `products`, and `purchases` respectively.
+    Write a single SQL query that performs the following for *each purchase* in `purchases` (excluding the very last purchase for each user, as it won't have a 'next' purchase):
+    *   **Joins** `users`, `products`, and `purchases` tables.
+    *   **Calculates sequential features based on the user's *prior purchases* (excluding the current one), relative to the current `purchase_date`**:
+        *   `user_prior_num_purchases`: Count of all *previous* purchases for the same user.
+        *   `user_prior_total_spend`: Sum of `amount` for all *previous* purchases for the same user.
+        *   `user_avg_prior_spend`: Average `amount` of all *previous* purchases for the same user.
+        *   `days_since_last_user_purchase`: Number of days between the current `purchase_date` and the user's *most recent prior* `purchase_date`. If it's the user's first purchase, use the number of days between `signup_date` and the current `purchase_date`.
+        *   `user_num_unique_categories_prior`: Count of distinct `product_category` from the user's *prior* purchases.
+    *   **Includes static user, current product, and current purchase attributes**: `purchase_id`, `user_id`, `purchase_date`, `amount` (current purchase amount), `quantity` (current purchase quantity), `product_id`, `category` (current product category), `unit_price` (current product unit price), `signup_date`, `segment`, `avg_annual_income`.
+    *   **Creates the Regression Target `next_purchase_amount`**: This should be the `amount` of the *immediately subsequent* purchase made by the same user. Use a window function for this. Filter out rows where `next_purchase_amount` is `NULL` (these are the last purchases for each user).
+    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
+    *   **Hint**: Use window functions with `LAG` and `SUM(CASE WHEN ... END)` / `AVG(...) OVER (...)` / `COUNT(...) OVER (...)` over `PARTITION BY user_id ORDER BY purchase_date`. For `next_purchase_amount`, use `LEAD(p.amount, 1) OVER (PARTITION BY u.user_id ORDER BY p.purchase_date)`. Use `julianday()` for date differences.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation (Product Success Tier)**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
-    *   Handle `NaN` values: Fill `total_views_first_14d`, `total_add_to_cart_first_14d`, `total_wishlist_first_14d`, `num_unique_users_interacting_first_14d` with 0. Fill `avg_view_duration_first_14d` with 0.0. For `days_from_launch_to_first_interaction` (for products with no interactions in the first 14 days), fill with 14 (representing activity started on day 14, or no activity).
-    *   Convert `launch_date` to datetime objects.
-    *   Calculate `total_interactions_first_14d`: Sum of all interaction counts.
-    *   Calculate `interaction_frequency_per_day_first_14d`: `total_interactions_first_14d` / 14.0. Fill any `NaN`s with 0.
-    *   **Create the Multi-Class Target `product_success_tier`**: Calculate `total_sales_in_first_60d` (sum of `quantity_sold`) for each `product_id` from the *original* `sales_df` for sales occurring *after* `launch_date` and *within 60 days* of `launch_date`. Merge this aggregate with `product_features_df` (left join), filling `NaN`s with 0 for products with no sales.
-        *   Calculate the 33rd and 66th percentiles for *non-zero* `total_sales_in_first_60d`.
-        *   Define segments:
-            *   'Low_Success': `total_sales_in_first_60d` == 0.
-            *   'Medium_Success': `total_sales_in_first_60d` > 0 AND `total_sales_in_first_60d` <= 33rd percentile.
-            *   'High_Success': `total_sales_in_first_60d` > 33rd percentile AND `total_sales_in_first_60d` <= 66th percentile.
-            *   'Very_High_Success': `total_sales_in_first_60d` > 66th percentile.
-    *   Define features `X` (all numerical: `initial_price`, `marketing_spend_at_launch`, `total_views_first_14d`, `total_add_to_cart_first_14d`, `total_wishlist_first_14d`, `avg_view_duration_first_14d`, `num_unique_users_interacting_first_14d`, `days_from_launch_to_first_interaction`, `total_interactions_first_14d`, `interaction_frequency_per_day_first_14d`; categorical: `category`) and target `y` (`product_success_tier`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`purchase_features_df`).
+    *   Handle `NaN` values: Fill `user_prior_num_purchases`, `user_prior_total_spend`, `user_num_unique_categories_prior` with 0. Fill `user_avg_prior_spend` with 0.0. For `days_since_last_user_purchase` (for a user's first purchase), SQL should handle, but if any `NaN`s remain, fill with `days_since_signup_at_purchase`.
+    *   Convert `signup_date` and `purchase_date` to datetime objects.
+    *   Calculate `days_since_signup_at_purchase`: Days between `signup_date` and `purchase_date`.
+    *   Calculate `spend_ratio_to_avg_prior`: `amount` / (`user_avg_prior_spend` if `user_avg_prior_spend` > 0 else `amount`). Fill any remaining `NaN` or `inf` with 0 or a large sentinel value.
+    *   Define features `X` (all numerical: `amount`, `quantity`, `unit_price`, `avg_annual_income`, `user_prior_num_purchases`, `user_prior_total_spend`, `user_avg_prior_spend`, `days_since_last_user_purchase`, `user_num_unique_categories_prior`, `days_since_signup_at_purchase`, `spend_ratio_to_avg_prior`; categorical: `segment`, `category`) and target `y` (`next_purchase_amount`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `product_success_tier`:
-    *   A violin plot (or box plot) showing the distribution of `total_add_to_cart_first_14d` for each `product_success_tier`. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `product_success_tier` across different `category` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_purchase_amount`:
+    *   A scatter plot showing `user_avg_prior_spend` vs. `next_purchase_amount`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
+    *   A box plot showing the distribution of `next_purchase_amount` across different `segment` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Regression)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `product_success_tier` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `next_purchase_amount` on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
+
+## Focus
+Regression, Sequential Feature Engineering, SQL Window Functions, Predicting Future Event Value
+
+## Dataset
+Synthetic customer purchase data, user profiles, and product information.
 
 ## Hint
-When simulating data, create clear patterns between early interactions (e.g., 'Add_to_Cart') and later sales to make the target predictable. For SQL, ensure `LEFT JOIN`s are used to retain all products, even those with no early interactions. When defining the target tiers in Pandas, remember to calculate percentiles only on *non-zero* sales values to avoid skewing low-engagement products.
+When simulating `purchases_df`, ensure a good mix of users with multiple purchases so that the `next_purchase_amount` target has enough data points. The `LEAD` window function in SQL is key for creating the `next_purchase_amount` target at the same row level as the features for the current purchase.
