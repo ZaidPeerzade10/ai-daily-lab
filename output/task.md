@@ -1,52 +1,53 @@
-# AI Daily Lab — 2026-03-18
+# AI Daily Lab — 2026-03-19
 
 ## Task
+Develop a machine learning pipeline to predict student course dropout risk based on their early learning management system (LMS) engagement and demographic information.
+
+## Focus
+Predicting early student dropout using initial LMS activity and student attributes.
+
+## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `segment` (e.g., 'Budget', 'Standard', 'Premium'), `avg_annual_income` (random integers 30000-200000).
-    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Home Goods', 'Apparel', 'Services'), `unit_price` (random floats 10.0-1000.0), `release_date` (random dates over the last 4 years).
-    *   `purchases_df`: With 8000-12000 rows. Columns: `purchase_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `purchase_date` (random dates occurring *after* their respective `signup_date` and *after* the `product_id`'s `release_date`), `quantity` (random integers 1-5).
-    *   Calculate `amount` for each purchase (`quantity * unit_price` from `products_df`).
-    *   **Simulate realistic patterns**: Ensure `purchase_date` is always after `signup_date` and `release_date`. Bias the data such that 'Premium' segment users and users with higher `avg_annual_income` tend to have higher `amount`s. Some `category`s (e.g., 'Electronics') should have higher average `unit_price`. Users often make repeat purchases of certain `category`s. Ensure that for most users, there is at least one subsequent purchase to define a target.
-    *   Sort `purchases_df` by `user_id` then `purchase_date` for easier sequential processing.
+    *   `students_df`: With 500-700 rows. Columns: `student_id` (unique integers), `enrollment_date` (random dates over the last 3 years), `major` (e.g., 'Computer Science', 'Mathematics', 'Biology', 'History', 'Art'), `academic_level` (e.g., 'Freshman', 'Sophomore', 'Junior', 'Senior'), `prior_gpa` (random floats 2.0-4.0).
+    *   `lms_activities_df`: With 5000-8000 rows. Columns: `activity_id` (unique integers), `student_id` (randomly sampled from `students_df` IDs), `activity_date` (random dates occurring *after* their respective `enrollment_date` but *within the first 30 days* of enrollment), `activity_type` (e.g., 'Login', 'Module_View', 'Assignment_Accessed', 'Quiz_Started', 'Forum_Post', 'Video_Watched'), `duration_minutes` (random floats 1.0-60.0, mostly for 'Module_View', 'Video_Watched', significantly lower for 'Login').
+    *   `dropout_events_df`: With 50-100 rows. Columns: `dropout_id` (unique integers), `student_id` (randomly sampled from `students_df` IDs), `dropout_date` (random dates *after* `enrollment_date`).
+    *   **Simulate realistic patterns**: Ensure `activity_date` is always after `enrollment_date` and within the 30-day window. Bias `dropout_events_df` such that students who eventually drop out should, *before their dropout_date or a general cutoff date*, exhibit patterns like: lower total `duration_minutes` and fewer valuable `activity_type`s (e.g., 'Assignment_Accessed', 'Quiz_Started') in their first 14 days of enrollment. Some `major`s or lower `prior_gpa` might correlate with higher dropout rates. Sort `lms_activities_df` by `student_id` then `activity_date`.
 
-2. **Load into SQLite & SQL Feature Engineering (Predicting Next Purchase Amount)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `purchases_df` into tables named `users`, `products`, and `purchases` respectively.
-    Write a single SQL query that performs the following for *each purchase* in `purchases` (excluding the very last purchase for each user, as it won't have a 'next' purchase):
-    *   **Joins** `users`, `products`, and `purchases` tables.
-    *   **Calculates sequential features based on the user's *prior purchases* (excluding the current one), relative to the current `purchase_date`**:
-        *   `user_prior_num_purchases`: Count of all *previous* purchases for the same user.
-        *   `user_prior_total_spend`: Sum of `amount` for all *previous* purchases for the same user.
-        *   `user_avg_prior_spend`: Average `amount` of all *previous* purchases for the same user.
-        *   `days_since_last_user_purchase`: Number of days between the current `purchase_date` and the user's *most recent prior* `purchase_date`. If it's the user's first purchase, use the number of days between `signup_date` and the current `purchase_date`.
-        *   `user_num_unique_categories_prior`: Count of distinct `product_category` from the user's *prior* purchases.
-    *   **Includes static user, current product, and current purchase attributes**: `purchase_id`, `user_id`, `purchase_date`, `amount` (current purchase amount), `quantity` (current purchase quantity), `product_id`, `category` (current product category), `unit_price` (current product unit price), `signup_date`, `segment`, `avg_annual_income`.
-    *   **Creates the Regression Target `next_purchase_amount`**: This should be the `amount` of the *immediately subsequent* purchase made by the same user. Use a window function for this. Filter out rows where `next_purchase_amount` is `NULL` (these are the last purchases for each user).
-    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
-    *   **Hint**: Use window functions with `LAG` and `SUM(CASE WHEN ... END)` / `AVG(...) OVER (...)` / `COUNT(...) OVER (...)` over `PARTITION BY user_id ORDER BY purchase_date`. For `next_purchase_amount`, use `LEAD(p.amount, 1) OVER (PARTITION BY u.user_id ORDER BY p.purchase_date)`. Use `julianday()` for date differences.
+2. **Load into SQLite & SQL Feature Engineering (Student Early Course Engagement)**: Create an in-memory SQLite database using `sqlite3`. Load `students_df` into a table named `students` and `lms_activities_df` into a table named `lms_activities`.
+    Write a single SQL query that performs the following for *each student*, aggregating their LMS activity *within the first 14 days* of their `enrollment_date`:
+    *   **Joins** `students` with aggregated subqueries for `lms_activities`.
+    *   **Aggregates features based on activity *within the first 14 days post-enrollment***: 
+        *   `num_logins_first_14d` (count of 'Login' `activity_type`)
+        *   `num_assignment_views_first_14d` (count of 'Assignment_Accessed' `activity_type`)
+        *   `total_activity_duration_first_14d` (sum of `duration_minutes` for all activities)
+        *   `days_with_activity_first_14d` (count of distinct `activity_date`s)
+        *   `avg_activity_duration_first_14d` (average `duration_minutes` for *all* activities)
+        *   `has_posted_to_forum_first_14d` (binary: 1 if 'Forum_Post' `activity_type` exists, else 0)
+        *   `days_since_first_activity_first_14d`: Number of days between `enrollment_date` and `MIN(activity_date)` for the student (if activity exists within the 14-day window).
+    *   **Includes static student attributes**: `student_id`, `enrollment_date`, `major`, `academic_level`, `prior_gpa`.
+    *   **Ensures** all students are included (using `LEFT JOIN`), showing 0 for counts/sums/binary flags, 0.0 for averages, and `NULL` for `days_since_first_activity_first_14d` if no activity in the first 14 days.
+    *   The query should return `student_id`, `enrollment_date`, `major`, `academic_level`, `prior_gpa`, and all the aggregated features.
+    *   **Hint**: Use `julianday()` for date differences. Filter activities based on `julianday(a.activity_date) - julianday(s.enrollment_date) <= 14` and `julianday(a.activity_date) - julianday(s.enrollment_date) >= 0`.
 
-3. **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`purchase_features_df`).
-    *   Handle `NaN` values: Fill `user_prior_num_purchases`, `user_prior_total_spend`, `user_num_unique_categories_prior` with 0. Fill `user_avg_prior_spend` with 0.0. For `days_since_last_user_purchase` (for a user's first purchase), SQL should handle, but if any `NaN`s remain, fill with `days_since_signup_at_purchase`.
-    *   Convert `signup_date` and `purchase_date` to datetime objects.
-    *   Calculate `days_since_signup_at_purchase`: Days between `signup_date` and `purchase_date`.
-    *   Calculate `spend_ratio_to_avg_prior`: `amount` / (`user_avg_prior_spend` if `user_avg_prior_spend` > 0 else `amount`). Fill any remaining `NaN` or `inf` with 0 or a large sentinel value.
-    *   Define features `X` (all numerical: `amount`, `quantity`, `unit_price`, `avg_annual_income`, `user_prior_num_purchases`, `user_prior_total_spend`, `user_avg_prior_spend`, `days_since_last_user_purchase`, `user_num_unique_categories_prior`, `days_since_signup_at_purchase`, `spend_ratio_to_avg_prior`; categorical: `segment`, `category`) and target `y` (`next_purchase_amount`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
+3. **Pandas Feature Engineering & Binary Target Creation (Early Dropout)**: Fetch the SQL query results into a pandas DataFrame (`student_engagement_features_df`).
+    *   Handle `NaN` values: Fill `num_logins_first_14d`, `num_assignment_views_first_14d`, `total_activity_duration_first_14d`, `days_with_activity_first_14d`, `has_posted_to_forum_first_14d` with 0. Fill `avg_activity_duration_first_14d` with 0.0. For `days_since_first_activity_first_14d` (for students with no activity in the first 14 days), fill with 14 (representing no activity or activity starting on day 14).
+    *   Convert `enrollment_date` to datetime objects.
+    *   Calculate `activity_frequency_first_14d`: `days_with_activity_first_14d` / 14.0 (proportion of active days in the first two weeks). Fill any `NaN`s with 0.
+    *   Calculate `engagement_ratio_first_14d`: (`num_assignment_views_first_14d` + (`num_logins_first_14d` if `num_logins_first_14d` > 0 else 0)) / (`num_logins_first_14d` + 1). Use `+1` to prevent division by zero.
+    *   **Create the Binary Target `will_dropout_early`**: For each student, check the `dropout_events_df` for any `dropout_date` that occurs *between* `enrollment_date` and `enrollment_date + timedelta(days=60)`. Create a binary column (1 if dropped out, 0 otherwise). Perform a left merge, filling `NaN`s from the merge with 0.
+    *   Define features `X` (all numerical: `prior_gpa`, `num_logins_first_14d`, `num_assignment_views_first_14d`, `total_activity_duration_first_14d`, `days_with_activity_first_14d`, `avg_activity_duration_first_14d`, `days_since_first_activity_first_14d`, `activity_frequency_first_14d`, `engagement_ratio_first_14d`; categorical: `major`, `academic_level`, `has_posted_to_forum_first_14d`) and target `y` (`will_dropout_early`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_purchase_amount`:
-    *   A scatter plot showing `user_avg_prior_spend` vs. `next_purchase_amount`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
-    *   A box plot showing the distribution of `next_purchase_amount` across different `segment` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `will_dropout_early`:
+    *   A violin plot (or box plot) showing the distribution of `total_activity_duration_first_14d` for non-dropouts (0) vs. dropouts (1). Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_dropout_early` (0 or 1) across different `major` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Regression)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `next_purchase_amount` on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
-
-## Focus
-Regression, Sequential Feature Engineering, SQL Window Functions, Predicting Future Event Value
-
-## Dataset
-Synthetic customer purchase data, user profiles, and product information.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-When simulating `purchases_df`, ensure a good mix of users with multiple purchases so that the `next_purchase_amount` target has enough data points. The `LEAD` window function in SQL is key for creating the `next_purchase_amount` target at the same row level as the features for the current purchase.
+When simulating dropout patterns, ensure a meaningful difference in early engagement metrics between students who drop out and those who don't. For SQL, carefully handle `NULL`s from `LEFT JOIN` and aggregate functions for users with no activity in the 14-day window. Remember to import all necessary libraries at the beginning.
