@@ -1,53 +1,13 @@
-# AI Daily Lab — 2026-03-19
+# AI Daily Lab — 2026-03-20
 
 ## Task
-Develop a machine learning pipeline to predict student course dropout risk based on their early learning management system (LMS) engagement and demographic information.
+Develop a machine learning pipeline to predict whether a customer will click on a specific promotional email, based on their profile, campaign details, and past email interaction history.
 
 ## Focus
-Predicting early student dropout using initial LMS activity and student attributes.
+Email Click-Through Rate (CTR) Prediction, Sequential Feature Engineering, Binary Classification
 
 ## Dataset
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `students_df`: With 500-700 rows. Columns: `student_id` (unique integers), `enrollment_date` (random dates over the last 3 years), `major` (e.g., 'Computer Science', 'Mathematics', 'Biology', 'History', 'Art'), `academic_level` (e.g., 'Freshman', 'Sophomore', 'Junior', 'Senior'), `prior_gpa` (random floats 2.0-4.0).
-    *   `lms_activities_df`: With 5000-8000 rows. Columns: `activity_id` (unique integers), `student_id` (randomly sampled from `students_df` IDs), `activity_date` (random dates occurring *after* their respective `enrollment_date` but *within the first 30 days* of enrollment), `activity_type` (e.g., 'Login', 'Module_View', 'Assignment_Accessed', 'Quiz_Started', 'Forum_Post', 'Video_Watched'), `duration_minutes` (random floats 1.0-60.0, mostly for 'Module_View', 'Video_Watched', significantly lower for 'Login').
-    *   `dropout_events_df`: With 50-100 rows. Columns: `dropout_id` (unique integers), `student_id` (randomly sampled from `students_df` IDs), `dropout_date` (random dates *after* `enrollment_date`).
-    *   **Simulate realistic patterns**: Ensure `activity_date` is always after `enrollment_date` and within the 30-day window. Bias `dropout_events_df` such that students who eventually drop out should, *before their dropout_date or a general cutoff date*, exhibit patterns like: lower total `duration_minutes` and fewer valuable `activity_type`s (e.g., 'Assignment_Accessed', 'Quiz_Started') in their first 14 days of enrollment. Some `major`s or lower `prior_gpa` might correlate with higher dropout rates. Sort `lms_activities_df` by `student_id` then `activity_date`.
-
-2. **Load into SQLite & SQL Feature Engineering (Student Early Course Engagement)**: Create an in-memory SQLite database using `sqlite3`. Load `students_df` into a table named `students` and `lms_activities_df` into a table named `lms_activities`.
-    Write a single SQL query that performs the following for *each student*, aggregating their LMS activity *within the first 14 days* of their `enrollment_date`:
-    *   **Joins** `students` with aggregated subqueries for `lms_activities`.
-    *   **Aggregates features based on activity *within the first 14 days post-enrollment***: 
-        *   `num_logins_first_14d` (count of 'Login' `activity_type`)
-        *   `num_assignment_views_first_14d` (count of 'Assignment_Accessed' `activity_type`)
-        *   `total_activity_duration_first_14d` (sum of `duration_minutes` for all activities)
-        *   `days_with_activity_first_14d` (count of distinct `activity_date`s)
-        *   `avg_activity_duration_first_14d` (average `duration_minutes` for *all* activities)
-        *   `has_posted_to_forum_first_14d` (binary: 1 if 'Forum_Post' `activity_type` exists, else 0)
-        *   `days_since_first_activity_first_14d`: Number of days between `enrollment_date` and `MIN(activity_date)` for the student (if activity exists within the 14-day window).
-    *   **Includes static student attributes**: `student_id`, `enrollment_date`, `major`, `academic_level`, `prior_gpa`.
-    *   **Ensures** all students are included (using `LEFT JOIN`), showing 0 for counts/sums/binary flags, 0.0 for averages, and `NULL` for `days_since_first_activity_first_14d` if no activity in the first 14 days.
-    *   The query should return `student_id`, `enrollment_date`, `major`, `academic_level`, `prior_gpa`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date differences. Filter activities based on `julianday(a.activity_date) - julianday(s.enrollment_date) <= 14` and `julianday(a.activity_date) - julianday(s.enrollment_date) >= 0`.
-
-3. **Pandas Feature Engineering & Binary Target Creation (Early Dropout)**: Fetch the SQL query results into a pandas DataFrame (`student_engagement_features_df`).
-    *   Handle `NaN` values: Fill `num_logins_first_14d`, `num_assignment_views_first_14d`, `total_activity_duration_first_14d`, `days_with_activity_first_14d`, `has_posted_to_forum_first_14d` with 0. Fill `avg_activity_duration_first_14d` with 0.0. For `days_since_first_activity_first_14d` (for students with no activity in the first 14 days), fill with 14 (representing no activity or activity starting on day 14).
-    *   Convert `enrollment_date` to datetime objects.
-    *   Calculate `activity_frequency_first_14d`: `days_with_activity_first_14d` / 14.0 (proportion of active days in the first two weeks). Fill any `NaN`s with 0.
-    *   Calculate `engagement_ratio_first_14d`: (`num_assignment_views_first_14d` + (`num_logins_first_14d` if `num_logins_first_14d` > 0 else 0)) / (`num_logins_first_14d` + 1). Use `+1` to prevent division by zero.
-    *   **Create the Binary Target `will_dropout_early`**: For each student, check the `dropout_events_df` for any `dropout_date` that occurs *between* `enrollment_date` and `enrollment_date + timedelta(days=60)`. Create a binary column (1 if dropped out, 0 otherwise). Perform a left merge, filling `NaN`s from the merge with 0.
-    *   Define features `X` (all numerical: `prior_gpa`, `num_logins_first_14d`, `num_assignment_views_first_14d`, `total_activity_duration_first_14d`, `days_with_activity_first_14d`, `avg_activity_duration_first_14d`, `days_since_first_activity_first_14d`, `activity_frequency_first_14d`, `engagement_ratio_first_14d`; categorical: `major`, `academic_level`, `has_posted_to_forum_first_14d`) and target `y` (`will_dropout_early`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `will_dropout_early`:
-    *   A violin plot (or box plot) showing the distribution of `total_activity_duration_first_14d` for non-dropouts (0) vs. dropouts (1). Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `will_dropout_early` (0 or 1) across different `major` values. Ensure appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Binary Classification)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Simulated customer profiles, email campaign details, and historical email interaction logs.
 
 ## Hint
-When simulating dropout patterns, ensure a meaningful difference in early engagement metrics between students who drop out and those who don't. For SQL, carefully handle `NULL`s from `LEFT JOIN` and aggregate functions for users with no activity in the 14-day window. Remember to import all necessary libraries at the beginning.
+{'step2_sql_features': 'For SQL feature engineering, ensure you join `email_events` with `customers` and `campaigns`. When calculating sequential features (e.g., `customer_prior_total_emails_sent`, `customer_prior_emails_clicked`), use window functions (`SUM() OVER (...)`, `LAG() OVER (...)`) partitioned by `customer_id` and ordered by `campaigns.send_date`. This ensures you only consider events chronologically *before* the current email send for feature calculation. For `days_since_last_customer_email_send`, if a user has no prior sends, calculate days between `signup_date` and current `send_date`.', 'step3_pandas_target': "For the binary target `is_clicked`, it's already present in the `email_events_df` (and thus in your SQL output). Focus on handling `NaN`s correctly for engineered features, especially prior rates (fill with 0.0) and 'days since' features (fill with `days_since_signup_at_send` for a customer's first email).", 'step5_ml_pipeline': 'Remember to include `campaign_type`, `segment`, `loyalty_status` as categorical features for `OneHotEncoder`. The numerical features should include all calculated rates, counts, and date differences.'}
