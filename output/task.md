@@ -1,56 +1,13 @@
-# AI Daily Lab — 2026-03-22
+# AI Daily Lab — 2026-03-23
 
 ## Task
-Develop a machine learning pipeline to predict patient no-show behavior for medical appointments, leveraging patient history and appointment details.
+Develop a machine learning pipeline to predict customer churn based on their initial 30 days of subscription usage patterns.
 
 ## Focus
-Predicting patient no-show for medical appointments using sequential behavior and static patient/appointment attributes. This task involves synthetic data generation, advanced SQL for sequential feature engineering, detailed pandas preprocessing, data visualization for insights, and a complete ML classification pipeline.
+Customer Churn Prediction, Time-Series Feature Engineering (early window), Binary Classification.
 
 ## Dataset
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `patients_df`: With 1000-1500 rows. Columns: `patient_id` (unique integers), `signup_date` (random dates over the last 7 years), `age` (random integers 18-90), `gender` (e.g., 'Male', 'Female', 'Non-binary'), `insurance_type` (e.g., 'Private', 'Public', 'None'), `num_existing_conditions` (random integers 0-5).
-    *   `appointments_df`: With 15000-20000 rows. Columns: `appt_id` (unique integers), `patient_id` (randomly sampled from `patients_df` IDs), `scheduled_datetime` (random dates over the last 5 years), `appt_datetime` (random dates occurring *after* `scheduled_datetime` and *after* `signup_date` for the respective patient, but within the next 90 days of `scheduled_datetime`), `clinic_location` (e.g., 'Downtown', 'Suburban_East', 'Suburban_West'), `specialty` (e.g., 'General Practice', 'Cardiology', 'Dermatology', 'Pediatrics'), `was_no_show` (binary, 0 or 1, representing the target).
-    *   **Simulate realistic no-show patterns**: Ensure `appt_datetime` is after `scheduled_datetime` and `signup_date`. Bias `was_no_show` (overall 10-20% no-show rate) such that:
-        *   Patients with higher `num_existing_conditions` or 'Public'/'None' `insurance_type` might have higher no-show rates.
-        *   Appointments `scheduled_days_in_advance` (calculated as `appt_datetime - scheduled_datetime`) that are very long or very short might have higher no-show rates.
-        *   Patients with a history of `was_no_show=1` are significantly more likely to no-show again.
-        *   Some `clinic_location`s or `specialty`s might have inherently higher no-show rates.
-        *   No-shows might be slightly higher for appointments on Mondays or Fridays, or certain times of day.
-    *   Sort `appointments_df` by `patient_id` then `appt_datetime` for easier sequential processing.
-
-2. **Load into SQLite & SQL Feature Engineering (Appointment-Level Context)**: Create an in-memory SQLite database using `sqlite3`. Load `patients_df` and `appointments_df` into tables named `patients` and `appointments` respectively.
-    Write a single SQL query that performs the following for *each appointment* in `appointments`:
-    *   **Joins** `patients` with `appointments`.
-    *   **Calculates sequential features based on the patient's *prior appointments* (excluding the current one), relative to the current `appt_datetime`**:
-        *   `patient_prior_appts_count`: Count of all *previous* appointments for the same patient.
-        *   `patient_prior_no_shows_count`: Count of *previous* appointments for the same patient that `was_no_show=1`.
-        *   `patient_prior_no_show_rate`: `patient_prior_no_shows_count` / `patient_prior_appts_count` (0.0 if no prior appointments).
-        *   `days_since_last_patient_appt`: Number of days between the current `appt_datetime` and the patient's *most recent prior* `appt_datetime`. If it's the patient's first appointment, use the number of days between `signup_date` and the current `appt_datetime`.
-    *   **Calculates features based on the current appointment and scheduling**:
-        *   `scheduled_days_in_advance`: Number of days between `scheduled_datetime` and `appt_datetime`.
-        *   `appt_day_of_week`: Day of the week for `appt_datetime` (e.g., 'Monday', 'Tuesday').
-        *   `appt_time_of_day_category`: 'Morning' (6-11), 'Afternoon' (12-17), 'Evening' (18-23).
-    *   **Includes static patient and current appointment attributes**: `appt_id`, `patient_id`, `appt_datetime`, `was_no_show` (the target), `age`, `gender`, `insurance_type`, `num_existing_conditions`, `clinic_location`, `specialty`, `signup_date`.
-    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
-    *   **Hint**: Use window functions with `LAG` and `SUM(CASE WHEN ... END)` / `COUNT(...) OVER (...)` over `PARTITION BY patient_id ORDER BY appt_datetime`. Use `julianday()` for date differences and `STRFTIME('%w', ...)` for day of week (0=Sunday, 6=Saturday) then map to names. Use `STRFTIME('%H', ...)` for hour to categorize time of day.
-
-3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`appointment_features_df`).
-    *   Handle `NaN` values: Fill `patient_prior_appts_count`, `patient_prior_no_shows_count` with 0. Fill `patient_prior_no_show_rate` with 0.0. Ensure `days_since_last_patient_appt` is handled (SQL should set it to `appt_datetime - signup_date` for first appts; if any `NaN`s remain, fill with a large sentinel like 9999).
-    *   Convert `appt_datetime`, `signup_date` to datetime objects.
-    *   Calculate `is_first_appointment`: Binary flag (1 if `patient_prior_appts_count` is 0, else 0).
-    *   Define features `X` (all numerical: `age`, `num_existing_conditions`, `scheduled_days_in_advance`, `patient_prior_appts_count`, `patient_prior_no_shows_count`, `patient_prior_no_show_rate`, `days_since_last_patient_appt`, `is_first_appointment`; categorical: `gender`, `insurance_type`, `clinic_location`, `specialty`, `appt_day_of_week`, `appt_time_of_day_category`) and target `y` (`was_no_show`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance due to no-show rate).
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `was_no_show`:
-    *   A violin plot (or box plot) showing the distribution of `scheduled_days_in_advance` for no-shows (1) vs. shows (0). Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `was_no_show` (0 or 1) across different `specialty` values. Ensure appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Binary Classification)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Synthetic data for customer subscriptions and daily usage logs.
 
 ## Hint
-When simulating `appt_datetime`, ensure it's always *after* `scheduled_datetime`. For `was_no_show` bias, remember to use `np.random.choice` with custom probabilities based on conditions. For SQL `days_since_last_patient_appt`, use a `CASE` statement with `LAG(julianday(appt_datetime))` to handle the first appointment case by defaulting to `julianday(appt_datetime) - julianday(signup_date)`.
+When simulating `churn_df`, ensure `churn_date` is `NULL` for non-churned customers, and a date after `signup_date` for churned ones. For SQL, use `LEFT JOIN` to ensure all customers are included even if they have no usage in the first 30 days. For pandas, carefully handle division by zero when calculating rates and frequencies.
