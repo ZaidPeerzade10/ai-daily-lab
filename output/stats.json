@@ -117,5 +117,6 @@
   "2026-03-20": "Develop a machine learning pipeline to predict whether a customer will click on a specific promotional email, based on their profile, campaign details, and past email interaction history.",
   "2026-03-21": "Develop a machine learning pipeline to predict the likelihood of a loan defaulting, based on applicant demographics, loan terms, and early repayment behavior.",
   "2026-03-22": "Develop a machine learning pipeline to predict patient no-show behavior for medical appointments, leveraging patient history and appointment details.",
-  "2026-03-23": "Develop a machine learning pipeline to predict customer churn based on their initial 30 days of subscription usage patterns."
+  "2026-03-23": "Develop a machine learning pipeline to predict customer churn based on their initial 30 days of subscription usage patterns.",
+  "2026-03-24": "Develop a machine learning pipeline to predict whether a customer will exhibit negative sentiment in future feedback, based on their initial interaction patterns and profile."
 }
