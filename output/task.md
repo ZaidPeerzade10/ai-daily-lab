@@ -1,57 +1,21 @@
-# AI Daily Lab — 2026-03-26
+# AI Daily Lab — 2026-03-27
 
 ## Task
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `device_preference` (e.g., 'Mobile', 'Desktop', 'Tablet').
-    *   `sessions_df`: With 8000-12000 rows. Columns: `session_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `session_start_time` (random timestamps occurring *after* their respective `signup_date`), `session_duration_seconds` (random integers 30-1800), `num_page_views` (random integers 1-50).
-    *   `page_views_df`: With 25000-40000 rows. Columns: `page_view_id` (unique integers), `session_id` (randomly sampled from `sessions_df` IDs), `page_type` (e.g., 'Homepage', 'Product_Page', 'Category_Page', 'Cart_Page', 'Checkout_Page', 'Purchase_Success', 'Help_Page'), `view_time_seconds` (random integers 5-300), `timestamp` (random timestamps occurring *within* the `session_duration_seconds` of its `session_id` from `sessions_df`).
-    *   **Simulate realistic conversion patterns**: Ensure `session_start_time` and `page_views_df.timestamp` are after `signup_date`. Define the target `is_converted` (binary, 0 or 1) for each *session*. A session `is_converted=1` if it contains at least one `page_type = 'Purchase_Success'`. Overall conversion rate should be 5-10%.
-        *   Bias `is_converted` such that:
-            *   Sessions with higher `session_duration_seconds` or `num_page_views` are more likely to convert.
-            *   Sessions containing 'Product_Page', 'Cart_Page', or 'Checkout_Page' (especially multiple times or for longer `view_time_seconds`) are more likely to convert.
-            *   Users from certain `region`s or with 'Desktop' `device_preference` might have higher conversion rates.
-            *   Sessions from users further past their `signup_date` (more established users) might have higher conversion.
-    *   Sort `sessions_df` by `user_id` then `session_start_time` and `page_views_df` by `session_id` then `timestamp` for easier sequential processing.
-
-2. **Load into SQLite & SQL Feature Engineering (Session-Level Aggregates)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `sessions_df`, and `page_views_df` into tables named `users`, `sessions`, and `page_views` respectively.
-    Write a single SQL query that performs the following for *each session* in `sessions`:
-    *   **Joins** `users`, `sessions`, and aggregated `page_views` data.
-    *   **Aggregates features based on `page_views` activity *within that session***:
-        *   `num_product_page_views`: Count of `page_views` with `page_type = 'Product_Page'`.
-        *   `total_time_on_product_pages_seconds`: Sum of `view_time_seconds` for `page_type = 'Product_Page'`.
-        *   `num_cart_page_views`: Count of `page_views` with `page_type = 'Cart_Page'`.
-        *   `num_checkout_page_views`: Count of `page_views` with `page_type = 'Checkout_Page'`.
-        *   `has_viewed_checkout`: Binary (1 if `num_checkout_page_views > 0`, else 0).
-        *   `total_page_view_duration_sum_seconds`: Sum of all `view_time_seconds` across all page views in the session.
-        *   `avg_view_time_per_page_in_session`: Average `view_time_seconds` across all page views in the session.
-    *   **Includes static user and current session attributes**: `session_id`, `user_id`, `session_start_time`, `session_duration_seconds`, `num_page_views` (from `sessions_df`), `is_converted` (the target, derived from `page_views`), `region`, `device_preference`, `signup_date`.
-    *   **Ensures** all sessions are included (using `LEFT JOIN`s to aggregated subqueries), showing 0 for counts/sums, and 0.0 for averages if no page views for a specific category or no page views at all.
-    *   The query should return all these attributes and engineered features. Missing values for aggregated features should be `NULL` or 0/0.0 as appropriate.
-
-3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`session_features_df`).
-    *   Handle `NaN` values: Fill all aggregated numerical features (`num_product_page_views`, `total_time_on_product_pages_seconds`, etc.) with 0 or 0.0 as appropriate. Ensure `has_viewed_checkout` is properly binary (0/1).
-    *   Convert `signup_date` and `session_start_time` to datetime objects.
-    *   Calculate `days_since_signup_at_session`: Days between `signup_date` and `session_start_time`.
-    *   Calculate `engagement_score_composite`: `session_duration_seconds` + `total_page_view_duration_sum_seconds` + (`num_product_page_views` * 10) + (`num_cart_page_views` * 20).
-    *   Define features `X` (all numerical: `session_duration_seconds`, `num_page_views` (from sessions), `num_product_page_views`, `total_time_on_product_pages_seconds`, `num_cart_page_views`, `num_checkout_page_views`, `total_page_view_duration_sum_seconds`, `avg_view_time_per_page_in_session`, `days_since_signup_at_session`, `engagement_score_composite`; categorical: `region`, `device_preference`, `has_viewed_checkout`) and target `y` (`is_converted`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance due to conversion rate).
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_converted`:
-    *   A violin plot (or box plot) showing the distribution of `session_duration_seconds` for non-converted (0) vs. converted (1) sessions. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_converted` (0 or 1) across different `region` values. Ensure appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Binary Classification)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Develop a machine learning pipeline to predict the popularity tier of newly released online courses based on their attributes and early enrollment/engagement metrics.
 
 ## Focus
-Predicting session-level conversion using granular within-session interaction data and user attributes.
+This task involves comprehensive data processing from synthetic generation to advanced ML. You will simulate course data, user enrollments, and engagement. Key is using SQL to aggregate early performance metrics (within the first 30 days post-release) at the course level. Pandas will be used to engineer additional features and create a multi-class 'popularity tier' target based on long-term engagement. The final pipeline will predict this tier using initial features.
 
 ## Dataset
-Synthetic e-commerce user, session, and page view data.
+Three pandas DataFrames:
+1.  `courses_df`: 100-200 rows. Columns: `course_id` (unique int), `release_date` (random dates over last 3 years), `category` (e.g., 'Programming', 'Data Science', 'Marketing', 'Design'), `instructor_experience_years` (random int 1-20), `difficulty_level` (e.g., 'Beginner', 'Intermediate', 'Advanced'), `price` (random floats 20-500).
+2.  `users_df`: 500-700 rows. Columns: `user_id` (unique int), `signup_date` (random dates over last 5 years), `region` (e.g., 'North', 'South', 'East', 'West').
+3.  `enrollments_df`: 10000-15000 rows. Columns: `enrollment_id` (unique int), `user_id` (sampled from `users_df`), `course_id` (sampled from `courses_df`), `enrollment_date` (random dates occurring *after* `signup_date` and *after* `release_date`), `completion_percentage` (random int 0-100), `time_spent_hours` (random floats 0.5-200).
+    *   **Simulate realistic patterns**: Higher `instructor_experience_years` or specific `category`s might lead to more enrollments. 'Advanced' courses might have lower enrollment but higher `completion_percentage` or `time_spent_hours` for enrollees. Ensure `enrollment_date` is consistent. Some courses should naturally become more popular than others.
+    *   Sort `enrollments_df` by `course_id` then `enrollment_date` for easier sequential processing.
 
 ## Hint
-When generating `page_views_df`, ensure `timestamp` falls between `session_start_time` and `session_start_time + session_duration_seconds`. Use `strftime('%Y-%m-%d %H:%M:%S')` for SQLite date/time compatibility. In SQL, use `GROUP BY s.session_id` and aggregate `pv` features. For `is_converted` in SQL, you can use `MAX(CASE WHEN pv.page_type = 'Purchase_Success' THEN 1 ELSE 0 END)`. Remember to use `COALESCE` or `IFNULL` in SQL for aggregated columns that might be `NULL` due to `LEFT JOIN` (e.g., if a session has no page views of a specific type).
+1.  **Synthetic Data**: For `enrollment_date`, ensure it's after both the user's `signup_date` and the course's `release_date`. Consider creating helper functions to generate realistic dates/times. To simulate popularity, you can assign an intrinsic 'popularity_factor' to some courses and use it to bias enrollment counts or specific engagement metrics. For `time_spent_hours`, ensure it correlates with `completion_percentage`.
+2.  **SQL Feature Engineering**: Define the `initial_popularity_cutoff_date` for each course as `DATE(c.release_date, '+30 days')`. Use `LEFT JOIN`s to aggregate enrollment data to ensure all courses are present. Filter enrollment activities with `e.enrollment_date BETWEEN c.release_date AND DATE(c.release_date, '+30 days')`. Use `GROUP BY course_id` on the aggregated subqueries. `IFNULL` can be useful for default values (0 for counts/sums, 0.0 for averages).
+3.  **Pandas Feature Engineering**: For the `popularity_tier` target, first calculate `total_enrollments_all_time` for each course from the *original* `enrollments_df`. Then, calculate percentiles (e.g., `pd.Series.quantile([0.33, 0.66])`) on the *non-zero* `total_enrollments_all_time` values to define your 'Medium', 'High', 'Very_High' thresholds. 'Low_LTV' would be courses with zero `total_enrollments_all_time`. Use `np.select` for tier assignment. Fill `NaN`s carefully for aggregated features (0 for counts/sums, 0.0 for averages). For `days_to_first_enrollment`, if a course has no enrollments in the first 30 days, you might fill it with a sentinel value like 30 (implying first enrollment occurred *after* the window, or never).
+4.  **ML Pipeline**: Ensure `difficulty_level` and `category` are treated as categorical features. `HistGradientBoostingClassifier` is robust to different feature types, but proper scaling and encoding (especially one-hot) for tree-based models is good practice. Use `stratify=y` in `train_test_split` due to potential class imbalance in popularity tiers.
