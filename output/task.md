@@ -1,21 +1,50 @@
-# AI Daily Lab — 2026-03-27
+# AI Daily Lab — 2026-03-28
 
 ## Task
-Develop a machine learning pipeline to predict the popularity tier of newly released online courses based on their attributes and early enrollment/engagement metrics.
+Develop a machine learning pipeline to predict the *next* sale price of a property, based on its static attributes, historical transaction data, and local market trends.
 
 ## Focus
-This task involves comprehensive data processing from synthetic generation to advanced ML. You will simulate course data, user enrollments, and engagement. Key is using SQL to aggregate early performance metrics (within the first 30 days post-release) at the course level. Pandas will be used to engineer additional features and create a multi-class 'popularity tier' target based on long-term engagement. The final pipeline will predict this tier using initial features.
+Predictive modeling with time-series-like features on static entities (properties), involving sequential SQL aggregates and regression.
 
 ## Dataset
-Three pandas DataFrames:
-1.  `courses_df`: 100-200 rows. Columns: `course_id` (unique int), `release_date` (random dates over last 3 years), `category` (e.g., 'Programming', 'Data Science', 'Marketing', 'Design'), `instructor_experience_years` (random int 1-20), `difficulty_level` (e.g., 'Beginner', 'Intermediate', 'Advanced'), `price` (random floats 20-500).
-2.  `users_df`: 500-700 rows. Columns: `user_id` (unique int), `signup_date` (random dates over last 5 years), `region` (e.g., 'North', 'South', 'East', 'West').
-3.  `enrollments_df`: 10000-15000 rows. Columns: `enrollment_id` (unique int), `user_id` (sampled from `users_df`), `course_id` (sampled from `courses_df`), `enrollment_date` (random dates occurring *after* `signup_date` and *after* `release_date`), `completion_percentage` (random int 0-100), `time_spent_hours` (random floats 0.5-200).
-    *   **Simulate realistic patterns**: Higher `instructor_experience_years` or specific `category`s might lead to more enrollments. 'Advanced' courses might have lower enrollment but higher `completion_percentage` or `time_spent_hours` for enrollees. Ensure `enrollment_date` is consistent. Some courses should naturally become more popular than others.
-    *   Sort `enrollments_df` by `course_id` then `enrollment_date` for easier sequential processing.
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `properties_df`: With 300-500 rows. Columns: `property_id` (unique integers), `built_year` (random integers 1900-2020), `square_footage` (random integers 800-5000), `num_bedrooms` (random integers 1-6), `num_bathrooms` (random floats like 1.0, 1.5, 2.0, 2.5, 3.0), `property_type` (e.g., 'House', 'Condo', 'Townhouse'), `neighborhood` (e.g., 'Downtown', 'Suburban_East', 'Suburban_West', 'Rural').
+    *   `transactions_df`: With 5000-8000 rows. Columns: `transaction_id` (unique integers), `property_id` (randomly sampled from `properties_df` IDs, ensuring multiple transactions for many properties), `sale_date` (random dates over the last 20 years, *after* the property's `built_year`), `sale_price` (random floats 100000-2000000, influenced by `square_footage`, `num_bedrooms`, `neighborhood`, and `built_year`, with an overall appreciation trend). 
+    *   **Simulate realistic patterns**: Ensure `sale_date` for a given `property_id` is strictly increasing. Bias `sale_price` such that larger properties, newer properties, or properties in certain `neighborhood`s have higher values. Ensure that a significant portion of properties have at least two sales for the target creation.
+    *   Sort `transactions_df` by `property_id` then `sale_date` for easier sequential processing.
+
+2. **Load into SQLite & SQL Feature Engineering (Property & Neighborhood Context)**: Create an in-memory SQLite database using `sqlite3`. Load `properties_df` and `transactions_df` into tables named `properties` and `transactions` respectively.
+    Write a single SQL query that performs the following for *each transaction event* in `transactions` (excluding the very last transaction for each property, as it won't have a 'next' sale):
+    *   **Joins** `properties` and `transactions` tables.
+    *   **Calculates sequential features based on the property's *prior sales* and the neighborhood's *prior market activity* (relative to the current `sale_date`)**:
+        *   `property_prior_sales_count`: Count of all *previous* sales for the same property.
+        *   `property_avg_prior_sale_price`: Average `sale_price` of *previous* sales for the same property (0.0 if no prior sales).
+        *   `days_since_last_property_sale`: Number of days between the current `sale_date` and the property's *most recent prior* `sale_date`. If it's the property's first recorded sale, use the number of days between the property's `built_year` (approximated as `DATE(p.built_year || '-01-01')`) and the current `sale_date`.
+        *   `neighborhood_avg_price_prior_to_sale`: Average `sale_price` of *all other properties* in the same `neighborhood` sold *before* the current `sale_date`.
+        *   `neighborhood_num_sales_prior_to_sale`: Count of *all other properties* in the same `neighborhood` sold *before* the current `sale_date`.
+    *   **Includes static property and current transaction attributes**: `transaction_id`, `property_id`, `sale_date`, `sale_price` (current), `built_year`, `square_footage`, `num_bedrooms`, `num_bathrooms`, `property_type`, `neighborhood`.
+    *   **Creates the Regression Target `next_sale_price`**: This should be the `sale_price` of the *immediately subsequent* transaction for the same `property_id`. Filter out rows where `next_sale_price` is `NULL`.
+    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
+
+3. **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`property_features_df`).
+    *   Handle `NaN` values: Fill `property_prior_sales_count`, `neighborhood_num_sales_prior_to_sale` with 0. Fill `property_avg_prior_sale_price`, `neighborhood_avg_price_prior_to_sale` with 0.0. Ensure `days_since_last_property_sale` is handled appropriately (SQL should mostly do this; if `NaN`s remain for first sales, fill with `property_age_at_sale_days`).
+    *   Convert all date columns (`sale_date`) to datetime objects.
+    *   Calculate `property_age_at_sale_days`: Days between `built_year` (approximated as `YYYY-01-01`) and `sale_date`.
+    *   Calculate `price_per_sqft_at_sale`: `sale_price` / `square_footage`.
+    *   Calculate `price_deviation_from_neighborhood_avg`: `sale_price` - `neighborhood_avg_price_prior_to_sale` (if `neighborhood_avg_price_prior_to_sale` is 0, consider using global average or 0).
+    *   Define features `X` (all numerical: `sale_price`, `built_year`, `square_footage`, `num_bedrooms`, `num_bathrooms`, `property_prior_sales_count`, `property_avg_prior_sale_price`, `days_since_last_property_sale`, `neighborhood_avg_price_prior_to_sale`, `neighborhood_num_sales_prior_to_sale`, `property_age_at_sale_days`, `price_per_sqft_at_sale`, `price_deviation_from_neighborhood_avg`; categorical: `property_type`, `neighborhood`) and target `y` (`next_sale_price`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
+
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_sale_price`:
+    *   A scatter plot showing `sale_price` (current) vs. `next_sale_price`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
+    *   A box plot showing the distribution of `next_sale_price` across different `neighborhood` values. Ensure appropriate labels and titles.
+
+5. **ML Pipeline & Evaluation (Regression)**: 
+    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
+        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `next_sale_price` on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
 
 ## Hint
-1.  **Synthetic Data**: For `enrollment_date`, ensure it's after both the user's `signup_date` and the course's `release_date`. Consider creating helper functions to generate realistic dates/times. To simulate popularity, you can assign an intrinsic 'popularity_factor' to some courses and use it to bias enrollment counts or specific engagement metrics. For `time_spent_hours`, ensure it correlates with `completion_percentage`.
-2.  **SQL Feature Engineering**: Define the `initial_popularity_cutoff_date` for each course as `DATE(c.release_date, '+30 days')`. Use `LEFT JOIN`s to aggregate enrollment data to ensure all courses are present. Filter enrollment activities with `e.enrollment_date BETWEEN c.release_date AND DATE(c.release_date, '+30 days')`. Use `GROUP BY course_id` on the aggregated subqueries. `IFNULL` can be useful for default values (0 for counts/sums, 0.0 for averages).
-3.  **Pandas Feature Engineering**: For the `popularity_tier` target, first calculate `total_enrollments_all_time` for each course from the *original* `enrollments_df`. Then, calculate percentiles (e.g., `pd.Series.quantile([0.33, 0.66])`) on the *non-zero* `total_enrollments_all_time` values to define your 'Medium', 'High', 'Very_High' thresholds. 'Low_LTV' would be courses with zero `total_enrollments_all_time`. Use `np.select` for tier assignment. Fill `NaN`s carefully for aggregated features (0 for counts/sums, 0.0 for averages). For `days_to_first_enrollment`, if a course has no enrollments in the first 30 days, you might fill it with a sentinel value like 30 (implying first enrollment occurred *after* the window, or never).
-4.  **ML Pipeline**: Ensure `difficulty_level` and `category` are treated as categorical features. `HistGradientBoostingClassifier` is robust to different feature types, but proper scaling and encoding (especially one-hot) for tree-based models is good practice. Use `stratify=y` in `train_test_split` due to potential class imbalance in popularity tiers.
+For SQL, use `LAG(..., 1) OVER (PARTITION BY property_id ORDER BY sale_date)` for prior property-specific features and `LEAD(..., 1) OVER (PARTITION BY property_id ORDER BY sale_date)` for the target. For neighborhood averages, consider a subquery with `WHERE t2.sale_date < t1.sale_date AND t2.neighborhood = t1.neighborhood` or an appropriate window function. Use `julianday()` for date differences, remembering to convert `built_year` to a date format like `DATE(p.built_year || '-01-01')` for the first sale's age calculation.
