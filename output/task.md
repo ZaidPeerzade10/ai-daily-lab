@@ -1,50 +1,13 @@
-# AI Daily Lab — 2026-03-28
+# AI Daily Lab — 2026-03-29
 
 ## Task
-Develop a machine learning pipeline to predict the *next* sale price of a property, based on its static attributes, historical transaction data, and local market trends.
+Develop a machine learning pipeline to predict the click-through likelihood of an ad impression based on user profile, ad attributes, and the user's prior ad interaction history.
 
 ## Focus
-Predictive modeling with time-series-like features on static entities (properties), involving sequential SQL aggregates and regression.
+Ad Click-Through Rate (CTR) Prediction, Sequential User Behavior, SQL Window Functions, Binary Classification.
 
 ## Dataset
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `properties_df`: With 300-500 rows. Columns: `property_id` (unique integers), `built_year` (random integers 1900-2020), `square_footage` (random integers 800-5000), `num_bedrooms` (random integers 1-6), `num_bathrooms` (random floats like 1.0, 1.5, 2.0, 2.5, 3.0), `property_type` (e.g., 'House', 'Condo', 'Townhouse'), `neighborhood` (e.g., 'Downtown', 'Suburban_East', 'Suburban_West', 'Rural').
-    *   `transactions_df`: With 5000-8000 rows. Columns: `transaction_id` (unique integers), `property_id` (randomly sampled from `properties_df` IDs, ensuring multiple transactions for many properties), `sale_date` (random dates over the last 20 years, *after* the property's `built_year`), `sale_price` (random floats 100000-2000000, influenced by `square_footage`, `num_bedrooms`, `neighborhood`, and `built_year`, with an overall appreciation trend). 
-    *   **Simulate realistic patterns**: Ensure `sale_date` for a given `property_id` is strictly increasing. Bias `sale_price` such that larger properties, newer properties, or properties in certain `neighborhood`s have higher values. Ensure that a significant portion of properties have at least two sales for the target creation.
-    *   Sort `transactions_df` by `property_id` then `sale_date` for easier sequential processing.
-
-2. **Load into SQLite & SQL Feature Engineering (Property & Neighborhood Context)**: Create an in-memory SQLite database using `sqlite3`. Load `properties_df` and `transactions_df` into tables named `properties` and `transactions` respectively.
-    Write a single SQL query that performs the following for *each transaction event* in `transactions` (excluding the very last transaction for each property, as it won't have a 'next' sale):
-    *   **Joins** `properties` and `transactions` tables.
-    *   **Calculates sequential features based on the property's *prior sales* and the neighborhood's *prior market activity* (relative to the current `sale_date`)**:
-        *   `property_prior_sales_count`: Count of all *previous* sales for the same property.
-        *   `property_avg_prior_sale_price`: Average `sale_price` of *previous* sales for the same property (0.0 if no prior sales).
-        *   `days_since_last_property_sale`: Number of days between the current `sale_date` and the property's *most recent prior* `sale_date`. If it's the property's first recorded sale, use the number of days between the property's `built_year` (approximated as `DATE(p.built_year || '-01-01')`) and the current `sale_date`.
-        *   `neighborhood_avg_price_prior_to_sale`: Average `sale_price` of *all other properties* in the same `neighborhood` sold *before* the current `sale_date`.
-        *   `neighborhood_num_sales_prior_to_sale`: Count of *all other properties* in the same `neighborhood` sold *before* the current `sale_date`.
-    *   **Includes static property and current transaction attributes**: `transaction_id`, `property_id`, `sale_date`, `sale_price` (current), `built_year`, `square_footage`, `num_bedrooms`, `num_bathrooms`, `property_type`, `neighborhood`.
-    *   **Creates the Regression Target `next_sale_price`**: This should be the `sale_price` of the *immediately subsequent* transaction for the same `property_id`. Filter out rows where `next_sale_price` is `NULL`.
-    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
-
-3. **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`property_features_df`).
-    *   Handle `NaN` values: Fill `property_prior_sales_count`, `neighborhood_num_sales_prior_to_sale` with 0. Fill `property_avg_prior_sale_price`, `neighborhood_avg_price_prior_to_sale` with 0.0. Ensure `days_since_last_property_sale` is handled appropriately (SQL should mostly do this; if `NaN`s remain for first sales, fill with `property_age_at_sale_days`).
-    *   Convert all date columns (`sale_date`) to datetime objects.
-    *   Calculate `property_age_at_sale_days`: Days between `built_year` (approximated as `YYYY-01-01`) and `sale_date`.
-    *   Calculate `price_per_sqft_at_sale`: `sale_price` / `square_footage`.
-    *   Calculate `price_deviation_from_neighborhood_avg`: `sale_price` - `neighborhood_avg_price_prior_to_sale` (if `neighborhood_avg_price_prior_to_sale` is 0, consider using global average or 0).
-    *   Define features `X` (all numerical: `sale_price`, `built_year`, `square_footage`, `num_bedrooms`, `num_bathrooms`, `property_prior_sales_count`, `property_avg_prior_sale_price`, `days_since_last_property_sale`, `neighborhood_avg_price_prior_to_sale`, `neighborhood_num_sales_prior_to_sale`, `property_age_at_sale_days`, `price_per_sqft_at_sale`, `price_deviation_from_neighborhood_avg`; categorical: `property_type`, `neighborhood`) and target `y` (`next_sale_price`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_sale_price`:
-    *   A scatter plot showing `sale_price` (current) vs. `next_sale_price`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
-    *   A box plot showing the distribution of `next_sale_price` across different `neighborhood` values. Ensure appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Regression)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `next_sale_price` on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
+Synthetic data mimicking user profiles, ad details, and ad impression logs with click outcomes.
 
 ## Hint
-For SQL, use `LAG(..., 1) OVER (PARTITION BY property_id ORDER BY sale_date)` for prior property-specific features and `LEAD(..., 1) OVER (PARTITION BY property_id ORDER BY sale_date)` for the target. For neighborhood averages, consider a subquery with `WHERE t2.sale_date < t1.sale_date AND t2.neighborhood = t1.neighborhood` or an appropriate window function. Use `julianday()` for date differences, remembering to convert `built_year` to a date format like `DATE(p.built_year || '-01-01')` for the first sale's age calculation.
+For SQL feature engineering, leverage `LAG()` and `SUM(CASE WHEN ... THEN 1 ELSE 0 END) OVER (PARTITION BY user_id ORDER BY impression_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)` to compute sequential features relative to each impression. For date differences, use `julianday()`. Ensure appropriate handling of `NULL`s for initial user events (e.g., first impression, first click).
