@@ -1,51 +1,53 @@
-# AI Daily Lab — 2026-04-02
+# AI Daily Lab — 2026-04-03
 
 ## Task
-Develop a machine learning pipeline to predict the category of a user's next content interaction based on their prior behavior and profile.
-
-## Focus
-Predicting the next content category (multi-class classification) using sequential interaction features and user/content attributes.
-
-## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 5 years), `age_group` (e.g., '18-24', '25-34', '35-49', '50+'), `premium_status` (e.g., 'Free', 'Basic', 'Premium').
-    *   `content_items_df`: With 100-150 rows. Columns: `content_id` (unique integers), `category` (e.g., 'Video', 'Article', 'Quiz', 'Forum', 'Ebook'), `difficulty` (e.g., 'Beginner', 'Intermediate', 'Advanced'), `avg_rating` (random floats 2.0-5.0).
-    *   `interactions_df`: With 10000-15000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `content_id` (randomly sampled from `content_items_df` IDs), `timestamp` (random timestamps occurring *after* their respective `signup_date`), `interaction_type` (e.g., 'view', 'like', 'share', 'comment', 'complete').
-    *   **Simulate realistic patterns**: Ensure `timestamp` is always after `signup_date`. Bias the data such that 'Premium' users interact with more diverse content and potentially more 'Advanced' difficulty items. Certain `interaction_type`s (e.g., 'comment', 'complete') are rarer. Users often interact with multiple items of the same `category` in a session before moving to another. Ensure that for most interactions, there is at least one subsequent interaction for the same user to define a target.
-    *   Sort `interactions_df` by `user_id` then `timestamp` for easier sequential processing.
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `region` (e.g., 'North', 'South', 'East', 'West'), `marketing_channel` (e.g., 'Organic', 'Paid Search', 'Social Media', 'Referral'), `age_group` (categorical: '18-24', '25-34', '35-49', '50+').
+    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Home & Garden', 'Apparel', 'Food'), `unit_price` (random floats 10.0-1000.0), `cost_price` (random floats 5.0-500.0).
+    *   `transactions_df`: With 10000-15000 rows. Columns: `transaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `transaction_date` (random dates occurring *after* their respective `signup_date`), `quantity` (random integers 1-5).
+    *   Calculate `amount` for each transaction (`quantity * unit_price` from `products_df`).
+    *   **Simulate realistic patterns**: Ensure `transaction_date` is always after `signup_date`. Bias data such that: 'Paid Search' users or users from certain `region`s might have slightly higher average `amount`s. 'Electronics' category should have higher average `unit_price`. Ensure user transactions span several months to allow for early behavior and future CLV calculation.
+    *   Sort `transactions_df` by `user_id` then `transaction_date` for easier processing.
 
-2. **Load into SQLite & SQL Feature Engineering (Sequential Interaction Prediction)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `content_items_df`, and `interactions_df` into tables named `users`, `content_items`, and `interactions` respectively.
-    Write a single SQL query that performs the following for *each interaction* in `interactions` (excluding the very last interaction for each user, as it won't have a 'next' interaction):
-    *   **Joins** `users`, `content_items`, and `interactions` tables.
-    *   **Calculates sequential features based on the user's *prior interactions* (excluding the current one), relative to the current `timestamp`**:
-        *   `user_prior_num_interactions`: Count of all *previous* interactions for the same user.
-        *   `days_since_last_user_interaction`: Number of days between the current `timestamp` and the user's *most recent prior* `timestamp`. If it's the user's first interaction, use the number of days between `signup_date` and the current `timestamp`.
-        *   `user_prior_num_unique_content_categories`: Count of distinct `category` from the user's *prior* interactions.
-        *   `user_prior_num_video_views`: Count of 'view' interactions for `category = 'Video'` from *prior* interactions.
-        *   `user_prior_num_article_views`: Count of 'view' interactions for `category = 'Article'` from *prior* interactions.
-    *   **Includes static user, current content, and current interaction attributes**: `interaction_id`, `user_id`, `timestamp`, `interaction_type` (current), `content_id`, `category` (current content category), `difficulty`, `avg_rating`, `signup_date`, `age_group`, `premium_status`.
-    *   **Creates the Multi-Class Target `next_content_category`**: This should be the `category` of the *immediately subsequent* interaction made by the same user. Use a window function for this. Filter out rows where `next_content_category` is `NULL`.
-    *   The query should return all these attributes and engineered features. Missing values for prior aggregates/dates should be `NULL`.
-    *   **Hint**: Use window functions with `LAG` and `LEAD` over `PARTITION BY user_id ORDER BY timestamp`. For strictly *prior* aggregates, use `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` within `SUM(...) OVER (...)` or `COUNT(...) OVER (...)`. For `days_since_last_user_interaction`, use `julianday()` and `LAG(i.timestamp, 1, u.signup_date) OVER (PARTITION BY u.user_id ORDER BY i.timestamp)` to handle first interactions. Filter out rows where `next_content_category` is `NULL`.
+2. **Load into SQLite & SQL Feature Engineering (Early User Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `transactions_df` into tables named `users`, `products`, and `transactions` respectively. For each user, define their `early_behavior_cutoff_date` as `signup_date + 30 days`.
+    Write a single SQL query that performs the following for *each user*, aggregating their transaction behavior *within their first 30 days post-signup* (i.e., `transaction_date` before or on `early_behavior_cutoff_date`):
+    *   **Joins** `users` with an aggregated subquery for `transactions` (and `products` to get `category` and `unit_price` for `amount` calculation if not already joined).
+    *   **Aggregates features based on activities *within the first 30 days* post-signup**:
+        *   `num_transactions_first_30d` (count of `transaction_id`s)
+        *   `total_spend_first_30d` (sum of `amount`)
+        *   `avg_transaction_amount_first_30d` (average of `amount`)
+        *   `num_unique_products_first_30d` (count of distinct `product_id`s)
+        *   `num_unique_categories_first_30d` (count of distinct `product_category`s)
+        *   `days_with_transactions_first_30d` (count of distinct dates from `transaction_date`)
+    *   **Includes static user attributes**: `user_id`, `signup_date`, `region`, `marketing_channel`, `age_group`.
+    *   **Ensures** all users are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums and 0.0 for averages if no activity in the first 30 days.
+    *   The query should return `user_id`, `signup_date`, `region`, `marketing_channel`, `age_group`, and all the aggregated features.
+    *   **Hint**: Use `julianday()` for date comparisons. Aggregate features using `SUM(CASE WHEN ... THEN ... END)`, `AVG(...)`, `COUNT(DISTINCT ...)`. Use `DATE(u.signup_date, '+30 days')` for the cutoff.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`interaction_features_df`).
-    *   Handle `NaN` values: Fill `user_prior_num_interactions`, `user_prior_num_unique_content_categories`, `user_prior_num_video_views`, `user_prior_num_article_views` with 0. For `days_since_last_user_interaction` (for a user's first interaction), SQL should handle, but if any `NaN`s remain, fill with `days_since_signup_at_interaction`.
-    *   Convert `signup_date` and `timestamp` to datetime objects.
-    *   Calculate `days_since_signup_at_interaction`: Days between `signup_date` and `timestamp`.
-    *   Calculate `interaction_frequency_prior`: `user_prior_num_interactions` / (`days_since_signup_at_interaction` + 1). Fill any `NaN` or `inf` with 0.
-    *   Define features `X` (all numerical: `avg_rating`, `user_prior_num_interactions`, `days_since_last_user_interaction`, `user_prior_num_unique_content_categories`, `user_prior_num_video_views`, `user_prior_num_article_views`, `days_since_signup_at_interaction`, `interaction_frequency_prior`; categorical: `interaction_type`, `category` (current), `difficulty`, `age_group`, `premium_status`) and target `y` (`next_content_category`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Regression Target Creation (CLV)**: Fetch the SQL query results into a pandas DataFrame (`user_early_features_df`).
+    *   Handle `NaN` values: Fill `num_transactions_first_30d`, `total_spend_first_30d`, `num_unique_products_first_30d`, `num_unique_categories_first_30d`, `days_with_transactions_first_30d` with 0. Fill `avg_transaction_amount_first_30d` with 0.0.
+    *   Convert `signup_date` to datetime objects.
+    *   Calculate `spend_frequency_first_30d`: `num_transactions_first_30d` / 30.0. Fill any `NaN`s with 0.
+    *   **Create the Regression Target `clv_6_months`**: For *each user*, calculate the sum of `amount` from *all original transactions* (from `transactions_df`) that occur *after* their `signup_date + 30 days` AND *before* their `signup_date + 210 days` (i.e., the 6-month period immediately following the early behavior window). Merge this aggregate (sum) with `user_early_features_df` (left join), filling `NaN`s with 0 for users with no future purchases.
+    *   Define features `X` (all numerical: `num_transactions_first_30d`, `total_spend_first_30d`, `avg_transaction_amount_first_30d`, `num_unique_products_first_30d`, `num_unique_categories_first_30d`, `days_with_transactions_first_30d`, `spend_frequency_first_30d`; categorical: `region`, `marketing_channel`, `age_group`) and target `y` (`clv_6_months`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_content_category`:
-    *   A violin plot (or box plot) showing the distribution of `days_since_last_user_interaction` for each of the top 5 `next_content_category` values. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `next_content_category` values across different `premium_status` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `clv_6_months`:
+    *   A scatter plot showing `total_spend_first_30d` vs. `clv_6_months`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
+    *   A box plot showing the distribution of `clv_6_months` across different `marketing_channel` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Regression)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `next_content_category` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `clv_6_months` on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
+
+## Focus
+Predicting 6-Month Customer Lifetime Value (CLV) based on early user engagement and static demographic information.
+
+## Dataset
+Synthetic e-commerce transaction data including user profiles, product details, and purchase history.
 
 ## Hint
-Use window functions with `LAG` and `LEAD` over `PARTITION BY user_id ORDER BY timestamp`. For strictly *prior* aggregates (e.g., counts of previous interactions), consider using `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` within `SUM(...) OVER (...)` or `COUNT(...) OVER (...)`. For `days_since_last_user_interaction`, combine `julianday()` with `LAG(i.timestamp, 1, u.signup_date) OVER (...)` to correctly handle a user's very first interaction.
+Carefully define time windows for early engagement feature aggregation and future CLV target calculation. Leverage `DATE()` and `julianday()` in SQLite for precise date-based filtering and calculations. For CLV, remember to sum transactions *after* the early behavior period for each user. Ensure your synthetic data generation produces enough transactions for the CLV calculation period for a meaningful number of users.
