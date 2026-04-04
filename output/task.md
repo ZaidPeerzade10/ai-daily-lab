@@ -1,53 +1,55 @@
-# AI Daily Lab — 2026-04-03
+# AI Daily Lab — 2026-04-04
 
 ## Task
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `region` (e.g., 'North', 'South', 'East', 'West'), `marketing_channel` (e.g., 'Organic', 'Paid Search', 'Social Media', 'Referral'), `age_group` (categorical: '18-24', '25-34', '35-49', '50+').
-    *   `products_df`: With 100-150 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Home & Garden', 'Apparel', 'Food'), `unit_price` (random floats 10.0-1000.0), `cost_price` (random floats 5.0-500.0).
-    *   `transactions_df`: With 10000-15000 rows. Columns: `transaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `transaction_date` (random dates occurring *after* their respective `signup_date`), `quantity` (random integers 1-5).
-    *   Calculate `amount` for each transaction (`quantity * unit_price` from `products_df`).
-    *   **Simulate realistic patterns**: Ensure `transaction_date` is always after `signup_date`. Bias data such that: 'Paid Search' users or users from certain `region`s might have slightly higher average `amount`s. 'Electronics' category should have higher average `unit_price`. Ensure user transactions span several months to allow for early behavior and future CLV calculation.
-    *   Sort `transactions_df` by `user_id` then `transaction_date` for easier processing.
+Develop a machine learning pipeline to predict the likelihood of a customer renewing their subscription, based on their subscription plan, region, and early usage patterns within the first 30 days.
 
-2. **Load into SQLite & SQL Feature Engineering (Early User Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `products_df`, and `transactions_df` into tables named `users`, `products`, and `transactions` respectively. For each user, define their `early_behavior_cutoff_date` as `signup_date + 30 days`.
-    Write a single SQL query that performs the following for *each user*, aggregating their transaction behavior *within their first 30 days post-signup* (i.e., `transaction_date` before or on `early_behavior_cutoff_date`):
-    *   **Joins** `users` with an aggregated subquery for `transactions` (and `products` to get `category` and `unit_price` for `amount` calculation if not already joined).
+## Focus
+Early engagement feature engineering, binary classification, and pipeline development.
+
+## Dataset
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `subscribers_df`: With 500-700 rows. Columns: `subscriber_id` (unique integers), `signup_date` (random dates over the last 2 years), `plan_type` (e.g., 'Basic', 'Standard', 'Premium'), `region` (e.g., 'North', 'South', 'East', 'West').
+    *   `usage_df`: With 15000-25000 rows. Columns: `usage_id` (unique integers), `subscriber_id` (randomly sampled from `subscribers_df` IDs), `event_timestamp` (random timestamps occurring *after* their respective `signup_date`), `activity_type` (e.g., 'stream_content', 'download_item', 'support_chat', 'settings_change'), `duration_minutes` (random integers 1-240, primarily for 'stream_content'/'download_item'; 0 for others).
+    *   **Simulate realistic renewal patterns**: Define the target `is_renewed` (binary, 0 or 1) for each *subscriber*. A subscriber `is_renewed=1` if their *early engagement* is high. Overall renewal rate should be 40-60%.
+        *   Bias `is_renewed` such that:
+            *   'Premium' `plan_type` users are more likely to renew.
+            *   Users from certain `region`s might have higher renewal rates.
+            *   Users who show higher `total_stream_duration` or `num_downloads` (simulated by having more usage events in general) within their first 30 days are more likely to renew.
+            *   Users with fewer `support_chat` events are more likely to renew.
+    *   Sort `usage_df` by `subscriber_id` then `event_timestamp` for easier sequential processing.
+
+2. **Load into SQLite & SQL Feature Engineering (Early Subscriber Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `subscribers_df` and `usage_df` into tables named `subscribers` and `usage` respectively. For each subscriber, define their `first_month_cutoff_date` as `signup_date + 30 days`.
+    Write a single SQL query that performs the following for *each subscriber*, aggregating their usage behavior *within their first 30 days post-signup* (i.e., `event_timestamp` before or on `first_month_cutoff_date`):
+    *   **Joins** `subscribers` with an aggregated subquery for `usage`.
     *   **Aggregates features based on activities *within the first 30 days* post-signup**:
-        *   `num_transactions_first_30d` (count of `transaction_id`s)
-        *   `total_spend_first_30d` (sum of `amount`)
-        *   `avg_transaction_amount_first_30d` (average of `amount`)
-        *   `num_unique_products_first_30d` (count of distinct `product_id`s)
-        *   `num_unique_categories_first_30d` (count of distinct `product_category`s)
-        *   `days_with_transactions_first_30d` (count of distinct dates from `transaction_date`)
-    *   **Includes static user attributes**: `user_id`, `signup_date`, `region`, `marketing_channel`, `age_group`.
-    *   **Ensures** all users are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums and 0.0 for averages if no activity in the first 30 days.
-    *   The query should return `user_id`, `signup_date`, `region`, `marketing_channel`, `age_group`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Aggregate features using `SUM(CASE WHEN ... THEN ... END)`, `AVG(...)`, `COUNT(DISTINCT ...)`. Use `DATE(u.signup_date, '+30 days')` for the cutoff.
+        *   `num_activities_first_30d` (count of `usage_id`s)
+        *   `total_stream_duration_first_30d` (sum of `duration_minutes` where `activity_type = 'stream_content'`)
+        *   `num_downloads_first_30d` (count of `activity_type = 'download_item'`)
+        *   `num_support_chats_first_30d` (count of `activity_type = 'support_chat'`)
+        *   `days_with_activity_first_30d` (count of distinct dates from `event_timestamp`)
+    *   **Includes static subscriber attributes**: `subscriber_id`, `signup_date`, `plan_type`, `region`, `is_renewed` (the target).
+    *   **Ensures** all subscribers are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums and 0 for binary flags if no activity in the first 30 days.
+    *   The query should return `subscriber_id`, `signup_date`, `plan_type`, `region`, `is_renewed`, and all the aggregated features.
+    *   **Hint**: Use `julianday()` for date comparisons. Aggregate event types using `SUM(CASE WHEN activity_type = '...' THEN duration_minutes ELSE 0 END)`. Use `strftime('%Y-%m-%d', event_timestamp)` for distinct dates, and `DATE(s.signup_date, '+30 days')` for the cutoff.
 
-3. **Pandas Feature Engineering & Regression Target Creation (CLV)**: Fetch the SQL query results into a pandas DataFrame (`user_early_features_df`).
-    *   Handle `NaN` values: Fill `num_transactions_first_30d`, `total_spend_first_30d`, `num_unique_products_first_30d`, `num_unique_categories_first_30d`, `days_with_transactions_first_30d` with 0. Fill `avg_transaction_amount_first_30d` with 0.0.
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`subscriber_early_features_df`).
+    *   Handle `NaN` values: Fill `num_activities_first_30d`, `total_stream_duration_first_30d`, `num_downloads_first_30d`, `num_support_chats_first_30d`, `days_with_activity_first_30d` with 0 or 0.0 as appropriate.
     *   Convert `signup_date` to datetime objects.
-    *   Calculate `spend_frequency_first_30d`: `num_transactions_first_30d` / 30.0. Fill any `NaN`s with 0.
-    *   **Create the Regression Target `clv_6_months`**: For *each user*, calculate the sum of `amount` from *all original transactions* (from `transactions_df`) that occur *after* their `signup_date + 30 days` AND *before* their `signup_date + 210 days` (i.e., the 6-month period immediately following the early behavior window). Merge this aggregate (sum) with `user_early_features_df` (left join), filling `NaN`s with 0 for users with no future purchases.
-    *   Define features `X` (all numerical: `num_transactions_first_30d`, `total_spend_first_30d`, `avg_transaction_amount_first_30d`, `num_unique_products_first_30d`, `num_unique_categories_first_30d`, `days_with_transactions_first_30d`, `spend_frequency_first_30d`; categorical: `region`, `marketing_channel`, `age_group`) and target `y` (`clv_6_months`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`). No `stratify` is needed for regression.
+    *   Calculate `activity_frequency_first_30d`: `num_activities_first_30d` / 30.0. Fill any `NaN`s with 0.
+    *   Calculate `engagement_score_composite`: (`total_stream_duration_first_30d` * 0.5) + (`num_downloads_first_30d` * 10) - (`num_support_chats_first_30d` * 20).
+    *   Define features `X` (all numerical: `num_activities_first_30d`, `total_stream_duration_first_30d`, `num_downloads_first_30d`, `num_support_chats_first_30d`, `days_with_activity_first_30d`, `activity_frequency_first_30d`, `engagement_score_composite`; categorical: `plan_type`, `region`) and target `y` (`is_renewed`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `clv_6_months`:
-    *   A scatter plot showing `total_spend_first_30d` vs. `clv_6_months`. Use `seaborn.regplot` to also visualize a linear regression fit. Ensure appropriate labels and titles.
-    *   A box plot showing the distribution of `clv_6_months` across different `marketing_channel` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_renewed`:
+    *   A violin plot (or box plot) showing the distribution of `total_stream_duration_first_30d` for non-renewed (0) vs. renewed (1) subscribers. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_renewed` (0 or 1) across different `plan_type` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Regression)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `clv_6_months` on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
-
-## Focus
-Predicting 6-Month Customer Lifetime Value (CLV) based on early user engagement and static demographic information.
-
-## Dataset
-Synthetic e-commerce transaction data including user profiles, product details, and purchase history.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-Carefully define time windows for early engagement feature aggregation and future CLV target calculation. Leverage `DATE()` and `julianday()` in SQLite for precise date-based filtering and calculations. For CLV, remember to sum transactions *after* the early behavior period for each user. Ensure your synthetic data generation produces enough transactions for the CLV calculation period for a meaningful number of users.
+When generating synthetic data for `is_renewed`, consider creating a temporary engagement score or using `plan_type` directly to assign `is_renewed` to ensure realistic correlations before generating usage data. In SQL, `SUM(CASE WHEN activity_type = 'stream_content' THEN duration_minutes ELSE 0 END)` is useful for conditional sums. Remember to use `stratify` in `train_test_split` for binary classification tasks with imbalanced classes.
