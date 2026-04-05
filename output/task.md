@@ -1,55 +1,17 @@
-# AI Daily Lab — 2026-04-04
+# AI Daily Lab — 2026-04-05
 
 ## Task
-Develop a machine learning pipeline to predict the likelihood of a customer renewing their subscription, based on their subscription plan, region, and early usage patterns within the first 30 days.
+Develop a machine learning pipeline to predict the likelihood of a user creating a support ticket in the next 30 days, based on their recent application usage and profile.
 
 ## Focus
-Early engagement feature engineering, binary classification, and pipeline development.
+Predicting future user support ticket generation (binary classification) using recent event data and user profiles.
 
 ## Dataset
-1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `subscribers_df`: With 500-700 rows. Columns: `subscriber_id` (unique integers), `signup_date` (random dates over the last 2 years), `plan_type` (e.g., 'Basic', 'Standard', 'Premium'), `region` (e.g., 'North', 'South', 'East', 'West').
-    *   `usage_df`: With 15000-25000 rows. Columns: `usage_id` (unique integers), `subscriber_id` (randomly sampled from `subscribers_df` IDs), `event_timestamp` (random timestamps occurring *after* their respective `signup_date`), `activity_type` (e.g., 'stream_content', 'download_item', 'support_chat', 'settings_change'), `duration_minutes` (random integers 1-240, primarily for 'stream_content'/'download_item'; 0 for others).
-    *   **Simulate realistic renewal patterns**: Define the target `is_renewed` (binary, 0 or 1) for each *subscriber*. A subscriber `is_renewed=1` if their *early engagement* is high. Overall renewal rate should be 40-60%.
-        *   Bias `is_renewed` such that:
-            *   'Premium' `plan_type` users are more likely to renew.
-            *   Users from certain `region`s might have higher renewal rates.
-            *   Users who show higher `total_stream_duration` or `num_downloads` (simulated by having more usage events in general) within their first 30 days are more likely to renew.
-            *   Users with fewer `support_chat` events are more likely to renew.
-    *   Sort `usage_df` by `subscriber_id` then `event_timestamp` for easier sequential processing.
-
-2. **Load into SQLite & SQL Feature Engineering (Early Subscriber Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `subscribers_df` and `usage_df` into tables named `subscribers` and `usage` respectively. For each subscriber, define their `first_month_cutoff_date` as `signup_date + 30 days`.
-    Write a single SQL query that performs the following for *each subscriber*, aggregating their usage behavior *within their first 30 days post-signup* (i.e., `event_timestamp` before or on `first_month_cutoff_date`):
-    *   **Joins** `subscribers` with an aggregated subquery for `usage`.
-    *   **Aggregates features based on activities *within the first 30 days* post-signup**:
-        *   `num_activities_first_30d` (count of `usage_id`s)
-        *   `total_stream_duration_first_30d` (sum of `duration_minutes` where `activity_type = 'stream_content'`)
-        *   `num_downloads_first_30d` (count of `activity_type = 'download_item'`)
-        *   `num_support_chats_first_30d` (count of `activity_type = 'support_chat'`)
-        *   `days_with_activity_first_30d` (count of distinct dates from `event_timestamp`)
-    *   **Includes static subscriber attributes**: `subscriber_id`, `signup_date`, `plan_type`, `region`, `is_renewed` (the target).
-    *   **Ensures** all subscribers are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums and 0 for binary flags if no activity in the first 30 days.
-    *   The query should return `subscriber_id`, `signup_date`, `plan_type`, `region`, `is_renewed`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Aggregate event types using `SUM(CASE WHEN activity_type = '...' THEN duration_minutes ELSE 0 END)`. Use `strftime('%Y-%m-%d', event_timestamp)` for distinct dates, and `DATE(s.signup_date, '+30 days')` for the cutoff.
-
-3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`subscriber_early_features_df`).
-    *   Handle `NaN` values: Fill `num_activities_first_30d`, `total_stream_duration_first_30d`, `num_downloads_first_30d`, `num_support_chats_first_30d`, `days_with_activity_first_30d` with 0 or 0.0 as appropriate.
-    *   Convert `signup_date` to datetime objects.
-    *   Calculate `activity_frequency_first_30d`: `num_activities_first_30d` / 30.0. Fill any `NaN`s with 0.
-    *   Calculate `engagement_score_composite`: (`total_stream_duration_first_30d` * 0.5) + (`num_downloads_first_30d` * 10) - (`num_support_chats_first_30d` * 20).
-    *   Define features `X` (all numerical: `num_activities_first_30d`, `total_stream_duration_first_30d`, `num_downloads_first_30d`, `num_support_chats_first_30d`, `days_with_activity_first_30d`, `activity_frequency_first_30d`, `engagement_score_composite`; categorical: `plan_type`, `region`) and target `y` (`is_renewed`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
-
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_renewed`:
-    *   A violin plot (or box plot) showing the distribution of `total_stream_duration_first_30d` for non-renewed (0) vs. renewed (1) subscribers. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_renewed` (0 or 1) across different `plan_type` values. Ensure appropriate labels and titles.
-
-5. **ML Pipeline & Evaluation (Binary Classification)**: 
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Synthetic data for user profiles, application events, and support tickets.
 
 ## Hint
-When generating synthetic data for `is_renewed`, consider creating a temporary engagement score or using `plan_type` directly to assign `is_renewed` to ensure realistic correlations before generating usage data. In SQL, `SUM(CASE WHEN activity_type = 'stream_content' THEN duration_minutes ELSE 0 END)` is useful for conditional sums. Remember to use `stratify` in `train_test_split` for binary classification tasks with imbalanced classes.
+1. **Data Generation**: For `duration_seconds` in `app_events_df`, ensure 'error_event' typically has 0 duration, while 'login', 'view_dashboard', 'feature_X_use', 'feature_Y_use' have positive durations. To simulate ticket patterns, randomly select a subset of users, especially those with higher `error_event` counts, to have future `support_tickets`. Ensure `support_tickets_df` contains `user_id`s that exist in `users_df`.
+2. **SQL Feature Engineering**: Define a `global_analysis_cutoff_date` (e.g., `pd.Timestamp('2023-10-01')`) that falls within your generated data range. Filter `app_events` where `event_timestamp` is between `global_analysis_cutoff_date - 30 days` and `global_analysis_cutoff_date`. Use `DATE(event_timestamp)` for `days_with_activity_last_30d` and `MAX(CASE WHEN ... THEN 1 ELSE 0 END)` for binary flags. For `avg_event_duration_last_30d`, use `AVG(duration_seconds)` on events where `duration_seconds` > 0.
+3. **Pandas Feature Engineering**: For the target, filter `support_tickets_df` to tickets where `ticket_timestamp` is between `global_analysis_cutoff_date` and `global_analysis_cutoff_date + 30 days`. Group by `user_id` and create the binary target `has_support_ticket_next_30d`. Remember to left merge this back to `user_features_df` and fill NaNs with 0 (meaning no tickets in that window).
+4. **Visualization**: Use `plt.figure(figsize=...)` for better plot sizing.
+5. **ML Pipeline**: Ensure `ColumnTransformer` correctly assigns numerical and categorical features based on your final `X` DataFrame columns. For the `classification_report`, specify `target_names=['No Ticket', 'Has Ticket']` for better readability if desired.
