@@ -132,5 +132,6 @@
   "2026-04-05": "Develop a machine learning pipeline to predict the likelihood of a user creating a support ticket in the next 30 days, based on their recent application usage and profile.",
   "2026-04-06": "Develop a machine learning pipeline to predict the likelihood of a product being returned, based on product characteristics, customer attributes, and transaction details.",
   "2026-04-07": "Develop a machine learning pipeline to predict the likelihood of a new user making their *first purchase* within 30 days of signup, based on their initial 7 days of browsing activity and profile attributes.",
-  "2026-04-08": "Develop a machine learning pipeline to predict the category of a user's *first purchase* occurring after their initial 90 days, based on their profile and early transaction behavior."
+  "2026-04-08": "Develop a machine learning pipeline to predict the category of a user's *first purchase* occurring after their initial 90 days, based on their profile and early transaction behavior.",
+  "2026-04-10": "Develop a machine learning pipeline to predict user churn (inactivity) within the next 30 days, based on their profile and recent activity patterns."
 }
