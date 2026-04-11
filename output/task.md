@@ -1,41 +1,47 @@
-# AI Daily Lab — 2026-04-10
+# AI Daily Lab — 2026-04-11
 
 ## Task
-Develop a machine learning pipeline to predict user churn (inactivity) within the next 30 days, based on their profile and recent activity patterns.
+Develop a machine learning pipeline to predict if a user will upgrade their subscription plan within the next 90 days, based on their initial 30 days of app usage and current plan.
 
 ## Focus
-Predictive modeling for user churn, leveraging time-series aggregation in SQL and Pandas, followed by a binary classification ML pipeline.
+Synthetic Data Generation (Pandas/Numpy), SQL Feature Engineering (time-windowed aggregates), Pandas Feature Engineering (new features, binary target creation), Data Visualization, ML Pipeline (binary classification), Model Evaluation (ROC AUC, Classification Report).
 
 ## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `plan_type` (e.g., 'Free', 'Basic', 'Pro'), `country` (e.g., 'US', 'UK', 'DE', 'FR').
-    *   `events_df`: With 15000-25000 rows. Columns: `event_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `event_timestamp` (random timestamps occurring *after* their respective `signup_date`), `event_type` (e.g., 'login', 'view_profile', 'create_post', 'like_post', 'settings_update').
-    *   **Simulate realistic activity and churn patterns**: Ensure `event_timestamp` is always after `signup_date`. For a subset of users (10-20%), ensure their `event_timestamp`s stop before a certain point (e.g., they have no events in the last 60-90 days of the dataset's overall time range, or their last event is X days after signup). Premium plans ('Basic', 'Pro') should generally have more events and be less likely to churn. Sort `events_df` by `user_id` then `event_timestamp`.
+    *   `users_df`: With 500-700 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `current_plan` (e.g., 'Free', 'Basic', 'Pro'), `region` (e.g., 'North', 'South', 'East', 'West'), `industry` (e.g., 'Tech', 'Finance', 'Retail', 'Education'). Add a `target_plan` column representing the user's plan 90 days *after* their 30-day early behavior window (i.e., at `signup_date + 120 days`).
+    *   `app_events_df`: With 15000-25000 rows. Columns: `event_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `timestamp` (random timestamps occurring *after* their respective `signup_date`), `event_type` (e.g., 'dashboard_view', 'report_run', 'api_call', 'settings_change', 'support_chat'), `duration_seconds` (random integers 0-600, primarily >0 for 'api_call' or 'report_run' events, 0 for others).
+    *   **Simulate realistic patterns**:
+        *   Ensure `app_events_df.timestamp` is always after the user's `signup_date`.
+        *   Bias `target_plan` such that a subset of 'Free' users upgrade to 'Basic' or 'Pro', and a subset of 'Basic' users upgrade to 'Pro'. 'Pro' users should not upgrade further. The overall upgrade rate should be 10-20%.
+        *   Bias `event_type` distribution based on `current_plan`: 'Pro' users should show higher usage of 'api_call' and 'report_run'. 'Free' users mostly 'dashboard_view'.
+        *   Users who eventually upgrade (`target_plan` is a higher tier than `current_plan`) should exhibit higher `duration_seconds` and counts for 'report_run' or 'api_call' during their *first 30 days*.
+    *   Sort `app_events_df` by `user_id` then `timestamp` for easier sequential processing.
 
-2. **Load into SQLite & SQL Feature Engineering (Recent User Activity)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` and `events_df` into tables named `users` and `events` respectively. For each user, define their `snapshot_date` as `signup_date + 60 days` (ensure `snapshot_date` is within the range of `events_df` timestamps for analysis; if not, adjust or filter users).
-    Write a single SQL query that performs the following for *each user*, aggregating their event behavior *within the 30 days leading up to their snapshot_date* (i.e., `event_timestamp` between `snapshot_date - 30 days` and `snapshot_date`):
-    *   **Joins** `users` with an aggregated subquery for `events`.
-    *   **Aggregates features based on activities *in the 30 days before snapshot_date***:
-        *   `num_events_last_30d` (count of `event_id`s)
-        *   `num_distinct_event_types_last_30d` (count of distinct `event_type`s)
-        *   `days_with_activity_last_30d` (count of distinct dates from `event_timestamp`)
-        *   `num_logins_last_30d` (count of `event_type = 'login'`)
-        *   `num_create_posts_last_30d` (count of `event_type = 'create_post'`)
-    *   **Includes static user attributes**: `user_id`, `signup_date`, `plan_type`, `country`.
-    *   **Ensures** all users are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums if no activity in the 30 days before `snapshot_date`.
-    *   The query should return `user_id`, `signup_date`, `plan_type`, `country`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Aggregate event types using `SUM(CASE WHEN event_type = '...' THEN 1 ELSE 0 END)`. Use `strftime('%Y-%m-%d', event_timestamp)` for distinct dates, and `DATE(u.signup_date, '+60 days')` for the `snapshot_date`.
+2. **Load into SQLite & SQL Feature Engineering (Early User Behavior)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` and `app_events_df` into tables named `users` and `app_events` respectively. For each user, define their `early_behavior_cutoff_date` as `signup_date + 30 days`.
+    Write a single SQL query that performs the following for *each user*, aggregating their event behavior *within their first 30 days post-signup* (i.e., `timestamp` before or on `early_behavior_cutoff_date`):
+    *   **Joins** `users` with an aggregated subquery for `app_events`.
+    *   **Aggregates features based on activities *within the first 30 days* post-signup**:
+        *   `num_events_first_30d` (count of `event_id`s)
+        *   `total_engagement_duration_first_30d` (sum of `duration_seconds` for all events)
+        *   `num_report_runs_first_30d` (count of `event_type = 'report_run'`)
+        *   `num_api_calls_first_30d` (count of `event_type = 'api_call'`)
+        *   `days_with_activity_first_30d` (count of distinct dates from `timestamp`)
+        *   `has_used_support_first_30d` (binary: 1 if `event_type = 'support_chat'` exists, else 0)
+    *   **Includes static user attributes**: `user_id`, `signup_date`, `current_plan`, `region`, `industry`, `target_plan`.
+    *   **Ensures** all users are included (using `LEFT JOIN` to the aggregated subquery), showing 0 for counts/sums and 0.0 for averages if no activity in the first 30 days.
+    *   The query should return `user_id`, `signup_date`, `current_plan`, `region`, `industry`, `target_plan`, and all the aggregated features.
 
-3. **Pandas Feature Engineering & Binary Target Creation (Churn)**: Fetch the SQL query results into a pandas DataFrame (`user_activity_features_df`).
-    *   Handle `NaN` values: Fill all aggregated numerical features (e.g., `num_events_last_30d`, `num_distinct_event_types_last_30d`) with 0 or 0.0 as appropriate.
-    *   Convert `signup_date` and derived `snapshot_date` (recalculate or retrieve from SQL) to datetime objects. Calculate `days_since_signup_at_snapshot`: Days between `signup_date` and `snapshot_date`.
-    *   Calculate `event_frequency_last_30d`: `num_events_last_30d` / 30.0. Fill any `NaN`s with 0.
-    *   **Create the Binary Target `is_churned_next_30d`**: For *each user*, determine if they had *any* event in the *original* `events_df` between their `snapshot_date` and `snapshot_date + 30 days`. If there are no events in this future 30-day window, `is_churned_next_30d = 1` (churned), else `0` (not churned). Merge this target with `user_activity_features_df` (left join), filling `NaN`s with 1 for users who might not have any future events due to data simulation limits or actual churn. Aim for a churn rate of 10-20% by design.
-    *   Define features `X` (numerical: `num_events_last_30d`, `num_distinct_event_types_last_30d`, `days_with_activity_last_30d`, `num_logins_last_30d`, `num_create_posts_last_30d`, `days_since_signup_at_snapshot`, `event_frequency_last_30d`; categorical: `plan_type`, `country`) and target `y` (`is_churned_next_30d`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_early_features_df`).
+    *   Handle `NaN` values: Fill all aggregated numerical features (`num_events_first_30d`, `total_engagement_duration_first_30d`, etc.) with 0 or 0.0 as appropriate. Ensure `has_used_support_first_30d` is properly binary (0/1).
+    *   Convert `signup_date` to datetime objects.
+    *   Calculate `activity_frequency_first_30d`: `num_events_first_30d` / 30.0. Fill any `NaN`s with 0.
+    *   Calculate `premium_feature_usage_ratio_first_30d`: (`num_report_runs_first_30d` + `num_api_calls_first_30d`) / (`num_events_first_30d` + 1). Use `+1` to prevent division by zero. Fill any `NaN`s with 0.
+    *   **Create the Binary Target `will_upgrade_90d`**: This target is 1 if the user's `target_plan` is a higher tier than their `current_plan`, and 0 otherwise. (e.g., 'Free' -> 'Basic' or 'Pro' is an upgrade; 'Basic' -> 'Pro' is an upgrade; any other state like 'Pro' -> 'Pro' is not an upgrade).
+    *   Define features `X` (all numerical: `num_events_first_30d`, `total_engagement_duration_first_30d`, `num_report_runs_first_30d`, `num_api_calls_first_30d`, `days_with_activity_first_30d`, `activity_frequency_first_30d`, `premium_feature_usage_ratio_first_30d`; categorical: `current_plan`, `region`, `industry`, `has_used_support_first_30d`) and target `y` (`will_upgrade_90d`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance due to potential imbalance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_churned_next_30d`:
-    *   A violin plot (or box plot) showing the distribution of `event_frequency_last_30d` for churned (1) vs. non-churned (0) users. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_churned_next_30d` (0 or 1) across different `plan_type` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `will_upgrade_90d`:
+    *   A violin plot (or box plot) showing the distribution of `total_engagement_duration_first_30d` for non-upgraders (0) vs. upgraders (1). Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_upgrade_90d` (0 or 1) across different `current_plan` values. Ensure appropriate labels and titles.
 
 5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
@@ -46,4 +52,4 @@ Predictive modeling for user churn, leveraging time-series aggregation in SQL an
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-When simulating churn for `events_df`, for a chosen subset of `user_id`s, determine a 'last_active_date' (e.g., random date after signup but before the dataset's end). Then, filter out any events for those users that would occur after their 'last_active_date'. For the `is_churned_next_30d` target, remember to calculate `snapshot_date + 30 days` and use this range for filtering events from the *original* `events_df`.
+For creating the `target_plan` column in `users_df`, you can define an ordering for plans (e.g., Free=0, Basic=1, Pro=2) to programmatically determine if `target_plan` is 'higher' than `current_plan` for the `will_upgrade_90d` target. In SQL, use `DATE(u.signup_date, '+30 days')` for the cutoff date and aggregate event-specific counts/sums using `SUM(CASE WHEN event_type = '...' THEN 1 ELSE 0 END)` or `SUM(CASE WHEN event_type = '...' THEN duration_seconds ELSE 0 END)`.
