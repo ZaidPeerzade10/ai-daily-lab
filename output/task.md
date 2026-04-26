@@ -1,52 +1,49 @@
-# AI Daily Lab — 2026-04-25
+# AI Daily Lab — 2026-04-26
 
 ## Task
-Develop a machine learning pipeline to predict a user's *next preferred content genre* based on their historical interaction patterns and profile attributes.
+Develop a machine learning pipeline to predict if a product will run out of stock within the next 30 days, based on its current inventory, recent sales velocity, and product characteristics.
 
 ## Focus
-Multi-class classification for user content preferences, involving date-based historical aggregation, and target creation from future behavior.
+Inventory Management, Binary Classification, Time-Series Aggregation, SQL & Pandas Feature Engineering
 
 ## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 500-800 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `region` (e.g., 'North', 'South', 'East', 'West'), `subscription_tier` (categorical: 'Free', 'Basic', 'Premium'), `device_type` (categorical: 'Mobile', 'Desktop', 'Tablet'), `age` (random integers 18-65).
-    *   `content_df`: With 100-150 rows. Columns: `content_id` (unique integers), `genre` (e.g., 'Action', 'Comedy', 'Drama', 'Sci-Fi', 'Documentary', 'Fantasy'), `avg_rating` (random floats 1.0-5.0), `production_year` (random integers over the last 15 years).
-    *   `interactions_df`: With 10000-15000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `content_id` (randomly sampled from `content_df` IDs), `interaction_date` (random dates occurring *after* their respective `signup_date`, up to a `current_prediction_date`), `interaction_type` (e.g., 'view', 'like', 'share'), `duration_minutes` (random integers 1-120).
-    *   **Simulate realistic patterns**: Ensure `interaction_date` is always after `signup_date`. `Premium` users should have a higher average `duration_minutes` and more `like` interactions. `Mobile` users might favor 'Comedy' or 'Shorts' (you can adjust duration), `Desktop` users 'Sci-Fi' or 'Drama'. Content with higher `avg_rating` should generally have more `view` interactions. Interactions should span several months for users.
-    *   Define a `current_prediction_date = pd.to_datetime('2024-03-01')`. Ensure `interaction_date` values do not exceed this date.
-    *   Sort `interactions_df` by `user_id` then `interaction_date`.
+    *   `products_df`: With 500-800 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Apparel', 'Books', 'Food'), `base_price` (random floats 10.0-500.0), `reorder_lead_time_days` (random integers 3-14).
+    *   `daily_sales_df`: With 10000-15000 rows. Columns: `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random dates over the last 6 months), `quantity_sold` (random integers 1-50).
+    *   `current_inventory_df`: With 500-800 rows (one row per product). Columns: `product_id` (unique, matching `products_df`), `stock_on_hand` (random integers 100-2000).
+    *   **Simulate realistic patterns**: Ensure `quantity_sold` is generally higher for products in 'Food' or 'Electronics' categories, and introduce some monthly seasonality (e.g., higher sales in November/December for 'Apparel'). For 10-15% of products, bias `stock_on_hand` to be relatively low compared to their average historical sales, making them more likely to be predicted as 'stock-out' candidates.
+    *   Sort `daily_sales_df` by `product_id` then `sale_date`.
 
-2. **Load into SQLite & SQL Feature Engineering (Historical Interaction Patterns)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `content_df`, and `interactions_df` into tables named `users`, `content`, and `interactions` respectively.
-    Write a single SQL query that performs the following for *each user*, aggregating their interaction behavior *within the 60 days ending at `current_prediction_date - 30 days`* (let's call this `history_cutoff_date`).
-    *   **Joins** `users` with an aggregated subquery for `interactions` (and `content` to get `genre` and `avg_rating`).
-    *   **Aggregates features based on activities *within the 60-day historical window* (i.e., `interaction_date` between `history_cutoff_date - 60 days` and `history_cutoff_date`)**:
-        *   `num_interactions_prev_60d` (count of `interaction_id`s)
-        *   `total_duration_prev_60d` (sum of `duration_minutes`)
-        *   `num_unique_genres_prev_60d` (count of distinct `genre`s)
-        *   `avg_content_rating_prev_60d` (average of `content.avg_rating` for interacted content).
-    *   **Includes static user attributes**: `user_id`, `signup_date`, `region`, `subscription_tier`, `device_type`, `age`.
-    *   **Ensures** all users are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no activity in the 60-day window.
-    *   The query should return `user_id`, `signup_date`, `region`, `subscription_tier`, `device_type`, `age`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Define `history_cutoff_date` in your SQL query as `DATE('2024-03-01', '-30 days')` and filter interactions accordingly.
+2. **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df`, `daily_sales_df`, and `current_inventory_df` into tables named `products`, `daily_sales`, and `inventory` respectively.
+    Define `analysis_date` as the maximum `sale_date` present in `daily_sales_df` across all products. This `analysis_date` represents 'today' for our prediction.
+    Write a single SQL query that performs the following for *each product*:
+    *   **Joins** `products` and `inventory` with an aggregated subquery for `daily_sales`.
+    *   **Aggregates features based on activities *within the last 30 days ending at `analysis_date`***:
+        *   `avg_sales_last_7d` (average of `quantity_sold` in the 7 days prior to or on `analysis_date`)
+        *   `total_sales_last_30d` (sum of `quantity_sold` in the 30 days prior to or on `analysis_date`)
+        *   `num_selling_days_last_30d` (count of distinct `sale_date`s in the 30 days prior to or on `analysis_date`)
+    *   **Includes static product attributes and current inventory**: `product_id`, `category`, `base_price`, `reorder_lead_time_days`, `stock_on_hand`.
+    *   **Ensures** all products are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no sales activity in the specified windows. Use `COALESCE` to handle `NULL`s.
+    *   The query should return `product_id`, `category`, `base_price`, `reorder_lead_time_days`, `stock_on_hand`, and all the aggregated features.
 
-3. **Pandas Feature Engineering & Multi-Class Target Creation (Next Preferred Genre)**: Fetch the SQL query results into a pandas DataFrame (`user_history_features_df`).
-    *   Handle `NaN` values: Fill `num_interactions_prev_60d`, `total_duration_prev_60d`, `num_unique_genres_prev_60d` with 0. Fill `avg_content_rating_prev_60d` with 0.0.
-    *   Convert `signup_date` to datetime objects. Set `current_prediction_date = pd.to_datetime('2024-03-01')` and `history_cutoff_date = current_prediction_date - pd.Timedelta(30, 'days')`.
-    *   Calculate `interaction_frequency_prev_60d`: `num_interactions_prev_60d` / 60.0. Fill any `NaN`s with 0.
-    *   **Create the Multi-Class Target `next_preferred_genre`**: For *each user*, identify the `genre` with the *highest total `duration_minutes`* from all their interactions (from the original `interactions_df` and `content_df`) that occur *between* `history_cutoff_date` AND `history_cutoff_date + 30 days`. Merge this preferred genre with `user_history_features_df` (left join).
-        *   If a user has *no interactions* in this 30-day future window, assign them the target class 'No Future Preference'.
-    *   Define features `X` (numerical: `num_interactions_prev_60d`, `total_duration_prev_60d`, `num_unique_genres_prev_60d`, `avg_content_rating_prev_60d`, `age`, `interaction_frequency_prev_60d`; categorical: `region`, `subscription_tier`, `device_type`) and target `y` (`next_preferred_genre`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
+    *   Handle `NaN` values: Fill numerical aggregated features (`avg_sales_last_7d`, etc.) with 0 or 0.0 as appropriate.
+    *   Calculate `sales_velocity_30d`: `total_sales_last_30d` / (`num_selling_days_last_30d` + 1e-6). Fill any `NaN` or `inf` with 0.
+    *   Calculate `stock_to_avg_daily_sales_7d_ratio`: `stock_on_hand` / (`avg_sales_last_7d` * 30 + 1e-6). Fill any `NaN` or `inf` with a large reasonable number (e.g., 9999).
+    *   **Create the Binary Target `will_stock_out_in_next_30_days`**: A product is considered to `will_stock_out_in_next_30_days = 1` if its `stock_on_hand` is less than or equal to (`avg_sales_last_7d` * 30). If `avg_sales_last_7d` is 0, the product will not stock out due to sales, so set its target to 0. Otherwise, `will_stock_out_in_next_30_days` is 0.
+    *   Define features `X` (numerical: `base_price`, `reorder_lead_time_days`, `stock_on_hand`, `avg_sales_last_7d`, `total_sales_last_30d`, `num_selling_days_last_30d`, `sales_velocity_30d`, `stock_to_avg_daily_sales_7d_ratio`; categorical: `category`) and target `y` (`will_stock_out_in_next_30_days`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `next_preferred_genre`:
-    *   A violin plot (or box plot) showing the distribution of `avg_content_rating_prev_60d` for each `next_preferred_genre` tier. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `next_preferred_genre` across different `subscription_tier` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `will_stock_out_in_next_30_days`:
+    *   A violin plot (or box plot) showing the distribution of `stock_to_avg_daily_sales_7d_ratio` for non-stock-out (0) vs. stock-out (1) predictions. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_stock_out_in_next_30_days` (0 or 1) across different `category` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Multi-Class)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
     *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `next_preferred_genre` for `X_test`.
-    *   Calculate and print the `sklearn.metrics.accuracy_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-When creating the `next_preferred_genre` target in Pandas, filter `interactions_df` for the target window, join with `content_df`, group by `user_id` and `genre`, sum `duration_minutes`, then use `idxmax()` on the grouped sums to find the preferred genre for each user. Remember to handle users with no interactions in the target window by assigning 'No Future Preference'.
+When generating `daily_sales_df`, consider how to create realistic sales trends (e.g., higher for certain categories, some seasonal peaks). For the SQL query, `julianday()` is useful for date arithmetic in `WHERE` clauses for the time-windowed aggregations. Remember to handle `LEFT JOIN` results carefully with `COALESCE` for aggregated features that might not exist for all products.
