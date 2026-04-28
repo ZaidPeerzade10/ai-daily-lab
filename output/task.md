@@ -1,50 +1,48 @@
-# AI Daily Lab — 2026-04-27
+# AI Daily Lab — 2026-04-28
 
 ## Task
-Develop a machine learning pipeline to predict the **overall average customer rating** for new products, based on their early review sentiment and product metadata.
+Develop a machine learning pipeline to predict if a financial transaction will be flagged for manual review.
 
 ## Focus
-Regression, Feature Engineering from Time-Series/Event Data, SQL Aggregations, Model Evaluation.
+Predicting unusual transaction behavior using transaction details, user profile, and time-based features, emphasizing SQL for basic feature extraction and a full ML pipeline.
 
 ## Dataset
 1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `products_df`: With 500-800 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Books', 'Apparel', 'Home Goods'), `launch_date` (random dates over the last 3 years), `initial_marketing_spend` (random floats 100.0-5000.0).
-    *   `reviews_df`: With 10000-15000 rows. Columns: `review_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `review_date` (random dates occurring *after* their respective `launch_date`), `rating` (random integers 1-5).
-    *   **Simulate realistic patterns**: Ensure `review_date` is always after `launch_date`. Products with higher `initial_marketing_spend` should generally attract more reviews. Products in certain categories ('Electronics') might have a slightly higher average rating bias.
-    *   Sort `reviews_df` by `product_id` then `review_date`.
+    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3 years), `country` (e.g., 'USA', 'Canada', 'UK', 'Australia', 'Germany'), `avg_monthly_transaction_count_prev_6m` (random integers 1-50), `avg_monthly_transaction_value_prev_6m` (random floats 50.0-5000.0).
+    *   `transactions_df`: With 20000-30000 rows. Columns: `transaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `transaction_date` (random timestamps *after* their respective `signup_date`), `amount` (random floats 10.0-10000.0), `currency` (e.g., 'USD', 'EUR', 'GBP'), `transaction_type` (e.g., 'purchase', 'withdrawal', 'transfer', 'bill_pay').
+    *   **Simulate realistic patterns**: 
+        *   For 5-10% of transactions, set `is_flagged_for_review = 1`. These should typically have higher `amount`, be from newer users (low `days_since_user_signup_at_transaction`), or involve specific `country`/`currency`/`transaction_type` combinations (e.g., large 'transfer' to/from 'Germany').
+        *   Ensure `transaction_date` is always after `signup_date`.
+    *   Add `is_flagged_for_review` (binary, 0 or 1) as a column to `transactions_df` based on the simulation rules.
+    *   Sort `transactions_df` by `user_id` then `transaction_date`.
 
-2. **Load into SQLite & SQL Feature Engineering (Early Review Metrics)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` and `reviews_df` into tables named `products` and `reviews` respectively. Define `early_review_cutoff_days = 30`.
-    Write a single SQL query that performs the following for *each product*:
-    *   **Joins** `products` with an aggregated subquery for `reviews`.
-    *   **Aggregates features based on reviews *within the first 30 days* post-launch** (i.e., `review_date` within `launch_date` and `launch_date + 30 days`):
-        *   `num_initial_reviews_30d` (count of `review_id`s)
-        *   `avg_rating_initial_30d` (average of `rating`)
-        *   `std_rating_initial_30d` (standard deviation of `rating` - if not directly available, approximate with `(SUM(rating*rating) - SUM(rating)*SUM(rating)/COUNT(rating)) / COUNT(rating)`) or just calculate `MAX(rating) - MIN(rating)` as a proxy for spread.
-    *   **Includes static product attributes**: `product_id`, `category`, `launch_date`, `initial_marketing_spend`.
-    *   **Ensures** all products are included (using `LEFT JOIN`), showing 0 for counts/sums/std if no reviews in the first 30 days.
-    *   The query should return `product_id`, `category`, `launch_date`, `initial_marketing_spend`, and all the aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Use `COALESCE` to handle `NULL`s from `LEFT JOIN`s for numerical aggregates.
+2. **Load into SQLite & SQL Feature Engineering (Transaction-Level Attributes)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df` and `transactions_df` into tables named `users` and `transactions` respectively.
+    Write a single SQL query that performs the following for *each transaction*:
+    *   **Joins** `transactions` and `users` data.
+    *   **Extracts/Calculates features**:
+        *   `transaction_day_of_week`: Day of the week when the transaction occurred (1=Monday, 7=Sunday). (SQLite `strftime('%w', ...)` returns 0 for Sunday, adjust if needed).
+        *   `transaction_hour_of_day`: Hour of the day when the transaction occurred (0-23).
+        *   `days_since_user_signup_at_transaction`: Number of days between `signup_date` and `transaction_date`.
+    *   **Includes static transaction and user attributes**: `transaction_id`, `user_id`, `amount`, `currency`, `transaction_type`, `is_flagged_for_review` (the target), `country`, `avg_monthly_transaction_count_prev_6m`, `avg_monthly_transaction_value_prev_6m`.
+    *   The query should return all these attributes and engineered features.
 
-3. **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
-    *   Handle `NaN` values: Fill `avg_rating_initial_30d`, `std_rating_initial_30d` with a neutral value (e.g., 3.0) and counts/spends with 0.0 as appropriate.
-    *   Convert `launch_date` to datetime objects. Assume a `CURRENT_DATE = pd.to_datetime('2024-03-01')`.
-    *   Calculate `days_since_launch_at_current_date`: Number of days between `launch_date` and `CURRENT_DATE`. Fill `NaN` or `inf` with 0.
-    *   Calculate `marketing_spend_per_initial_review`: `initial_marketing_spend` / (`num_initial_reviews_30d` + 1). Fill `NaN` or `inf` with 0.
-    *   **Create the Regression Target `overall_average_rating`**: For *each product*, calculate its overall average rating from *all* reviews in the *original* `reviews_df`.
-        *   Merge this aggregate with `product_features_df` (left join).
-    *   Define features `X` (numerical: `num_initial_reviews_30d`, `avg_rating_initial_30d`, `std_rating_initial_30d`, `initial_marketing_spend`, `days_since_launch_at_current_date`, `marketing_spend_per_initial_review`; categorical: `category`) and target `y` (`overall_average_rating`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+3. **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`transaction_features_df`).
+    *   Convert `transaction_date` and `signup_date` to datetime objects (if not already done).
+    *   Calculate `amount_to_avg_monthly_value_ratio`: `amount` / (`avg_monthly_transaction_value_prev_6m` + 1e-6). Fill any `NaN`s or `inf` with 0.0.
+    *   Calculate `amount_per_day_since_signup`: `amount` / (`days_since_user_signup_at_transaction` + 1). Fill any `NaN`s with 0.0.
+    *   Define features `X` (numerical: `amount`, `transaction_day_of_week`, `transaction_hour_of_day`, `days_since_user_signup_at_transaction`, `avg_monthly_transaction_count_prev_6m`, `avg_monthly_transaction_value_prev_6m`, `amount_to_avg_monthly_value_ratio`, `amount_per_day_since_signup`; categorical: `currency`, `transaction_type`, `country`) and target `y` (`is_flagged_for_review`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4. **Data Visualization**: Create two separate plots to visually inspect relationships with `overall_average_rating`:
-    *   A scatter plot showing `avg_rating_initial_30d` vs. `overall_average_rating`. Add a regression line if possible. Ensure appropriate labels and titles.
-    *   A box plot showing the distribution of `overall_average_rating` across different `category` values. Ensure appropriate labels and titles.
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `is_flagged_for_review`:
+    *   A violin plot (or box plot) showing the distribution of `amount` for non-flagged (0) vs. flagged (1) transactions. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_flagged_for_review` (0 or 1) across different `transaction_type` values. Ensure appropriate labels and titles.
 
-5. **ML Pipeline & Evaluation (Regression)**: 
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict `overall_average_rating` on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-When simulating `std_rating_initial_30d` in SQL, if SQLite's `STDEV` isn't easily accessible, `(AVG(rating*rating) - AVG(rating)*AVG(rating)) * COUNT(rating) / (COUNT(rating)-1)` or a simpler range `MAX(rating) - MIN(rating)` can work as a proxy for variability. Ensure your target `overall_average_rating` is calculated from *all* reviews for a product, not just the initial 30 days used for features. Use `np.random.normal` or similar to introduce slight biases in ratings for specific categories or marketing spend levels during data generation.
+Remember to convert SQLite's `strftime('%w', ...)` output (0=Sunday, 6=Saturday) to your preferred 1-7 or 0-6 system if necessary. Use `julianday()` for calculating date differences in SQLite. Pay attention to handling potential division-by-zero or `inf` values during feature engineering in Pandas.
