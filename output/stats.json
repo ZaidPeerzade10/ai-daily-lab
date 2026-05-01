@@ -146,5 +146,6 @@
   "2026-04-26": "Develop a machine learning pipeline to predict if a product will run out of stock within the next 30 days, based on its current inventory, recent sales velocity, and product characteristics.",
   "2026-04-27": "Develop a machine learning pipeline to predict the **overall average customer rating** for new products, based on their early review sentiment and product metadata.",
   "2026-04-28": "Develop a machine learning pipeline to predict if a financial transaction will be flagged for manual review.",
-  "2026-04-29": "Develop a machine learning pipeline to predict whether a user will click on a given online advertisement (Click-Through Rate prediction), based on user profile, ad characteristics, and impression context."
+  "2026-04-29": "Develop a machine learning pipeline to predict whether a user will click on a given online advertisement (Click-Through Rate prediction), based on user profile, ad characteristics, and impression context.",
+  "2026-05-01": "Develop a machine learning pipeline to predict the **resolution time category** ('Fast', 'Medium', 'Slow') for new customer support tickets, based on ticket attributes, user profile, and hypothetical agent specialization."
 }
