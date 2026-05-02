@@ -1,3 +1,4 @@
 {
-  "2026-05-01": "Develop a machine learning pipeline to predict the **resolution time category** ('Fast', 'Medium', 'Slow') for new customer support tickets, based on ticket attributes, user profile, and hypothetical agent specialization."
+  "2026-05-01": "Develop a machine learning pipeline to predict the **resolution time category** ('Fast', 'Medium', 'Slow') for new customer support tickets, based on ticket attributes, user profile, and hypothetical agent specialization.",
+  "2026-05-02": "Develop a machine learning pipeline to predict if a user will make a purchase (convert) within 7 days of being exposed to a specific A/B test variant."
 }
