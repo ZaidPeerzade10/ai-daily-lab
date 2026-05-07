@@ -1,41 +1,48 @@
-# AI Daily Lab — 2026-05-06
+# AI Daily Lab — 2026-05-07
 
 ## Task
-Develop a machine learning pipeline to predict employee turnover (binary classification) within the next 90 days, based on employee profile and recent performance review data.
+Develop a machine learning pipeline to predict if a new social media post will 'go viral' within 7 days of its creation, based on initial engagement metrics and post attributes.
 
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `employees_df`: With 1000-1500 rows. Columns: `employee_id` (unique integers), `department` (e.g., 'Sales', 'Engineering', 'HR', 'Marketing'), `years_at_company` (random floats 0.5-20.0), `salary_level` (e.g., 'Junior', 'Mid', 'Senior', 'Lead'), `satisfaction_score` (random floats 0.1-1.0), `last_promotion_date` (random dates over the last 5 years, or `NaT` if never promoted), `hire_date` (random dates over the last 20 years), `exit_date` (random dates, for ~15-20% of employees, occurring *after* `hire_date` and within the last 18 months, `NaT` otherwise).
-    *   `performance_reviews_df`: With 3000-5000 rows. Columns: `review_id` (unique integers), `employee_id` (randomly sampled from `employees_df` IDs), `review_date` (random dates *after* respective `hire_date` and before `exit_date` if applicable), `performance_score` (random integers 1-5), `feedback_sentiment` (e.g., 'Positive', 'Neutral', 'Negative').
-    *   **Simulate realistic patterns**: Ensure `review_date` is always after `hire_date` and before `exit_date`. Simulate lower `satisfaction_score` for employees with `exit_date`. Employees with higher `years_at_company` should generally have higher `salary_level`. Employees with an `exit_date` should, for their last 1-3 reviews before exit, have slightly lower `performance_score` or 'Negative' `feedback_sentiment` 10-20% of the time. `performance_reviews_df` should have multiple reviews per employee over time.
-    *   Sort `performance_reviews_df` by `employee_id` then `review_date`.
+## Focus
+Predictive modeling of content popularity, time-series feature engineering, binary classification.
 
-2.  **Load into SQLite & SQL Feature Engineering (Recent Performance & Tenure)**: Create an in-memory SQLite database using `sqlite3`. Load `employees_df` and `performance_reviews_df` into tables named `employees` and `performance_reviews` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 3 months prior to the latest `review_date` in your generated `performance_reviews_df` (e.g., `performance_reviews_df['review_date'].max() - pd.Timedelta(months=3)`).
-    *   Write a single SQL query that performs the following for *each employee*, aggregating their performance review behavior and tenure *up to `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
-        *   `avg_performance_prev_12m` (average of `performance_score` for reviews in the 12 months ending at `current_cutoff_date`).
-        *   `last_review_score_at_cutoff` (most recent `performance_score` before or on `current_cutoff_date`).
-        *   `days_since_last_review_at_cutoff`: Number of days between `current_cutoff_date` and the `review_date` of `last_review_score_at_cutoff`. Return a large number (e.g., 9999) if no reviews before cutoff.
-        *   `num_reviews_prev_12m` (count of `review_id`s in the 12 months ending at `current_cutoff_date`).
-        *   `days_since_last_promotion_at_cutoff`: Number of days between `current_cutoff_date` and `last_promotion_date`. Return a large number (e.g., 9999) if no promotion date or promotion after cutoff.
-    *   **Includes static employee attributes**: `employee_id`, `department`, `years_at_company`, `salary_level`, `satisfaction_score`, `hire_date`.
-    *   **Ensures** all employees are included (using `LEFT JOIN`), showing 0 for counts/sums/averages if no activity in the relevant windows.
-    *   The query should return `employee_id`, `department`, `years_at_company`, `salary_level`, `satisfaction_score`, `hire_date`, `current_cutoff_date`, and all aggregated features.
-    *   **Hint**: Use `julianday()` for date comparisons. Use `COALESCE` to handle `NULL`s from `LEFT JOIN`s or when no matching history.
+## Dataset
+1. **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `posts_df`: With 1000-1500 rows. Columns: `post_id` (unique integers), `user_id` (random integers 1-200, simulating different creators), `post_date` (random dates over the last 1-2 years), `category` (e.g., 'News', 'Humor', 'DIY', 'Tech', 'Fashion'), `num_hashtags` (random integers 0-10), `sentiment_score` (random floats -1.0 to 1.0), `user_follower_count` (random integers 100-100000, for the `user_id` at `post_date`).
+    *   `interactions_df`: With 30000-50000 rows. Columns: `interaction_id` (unique integers), `post_id` (randomly sampled from `posts_df` IDs), `interaction_timestamp` (random timestamps *after* their respective `post_date`), `interaction_type` (e.g., 'like', 'comment', 'share', 'view').
+    *   **Simulate realistic patterns**: Ensure `interaction_timestamp` is always after `post_date`.
+        *   For 5-10% of posts, simulate 'viral' behavior: significantly higher interaction counts (especially 'share' and 'comment') within the first 7 days, fading thereafter.
+        *   Posts by users with higher `user_follower_count` should have a higher baseline number of interactions.
+        *   Posts with higher `sentiment_score` might attract more 'like' interactions.
+    *   Sort `interactions_df` by `post_id` then `interaction_timestamp`.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`employee_features_df`).
-    *   Convert all relevant date columns (`hire_date`, `current_cutoff_date`, `last_promotion_date`) to datetime objects.
-    *   Handle `NaN` values: Fill numerical aggregated features (`avg_performance_prev_12m`, etc.) with 0 or 0.0 as appropriate. Fill `days_since_last_review_at_cutoff` and `days_since_last_promotion_at_cutoff` with 9999.
-    *   Calculate `employee_tenure_at_cutoff_days`: Number of days between `hire_date` and `current_cutoff_date`.
-    *   Calculate `review_frequency_prev_12m`: `num_reviews_prev_12m` / 365.0. Fill any `NaN` or `inf` with 0.
-    *   **Create the Binary Target `will_churn_in_next_90_days`**: For *each employee*, determine if their simulated `exit_date` (from the original `employees_df` merged back) falls within the 90-day period *immediately following* their `current_cutoff_date`. Merge this aggregate (1 if yes, 0 if no) with `employee_features_df`, filling `NaN`s with 0 for employees who did not exit or whose exit date falls outside the window.
-    *   Define features `X` (numerical: `years_at_company`, `satisfaction_score`, `avg_performance_prev_12m`, `last_review_score_at_cutoff`, `days_since_last_review_at_cutoff`, `num_reviews_prev_12m`, `days_since_last_promotion_at_cutoff`, `employee_tenure_at_cutoff_days`, `review_frequency_prev_12m`; categorical: `department`, `salary_level`) and target `y` (`will_churn_in_next_90_days`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+2. **Load into SQLite & SQL Feature Engineering (Early Engagement)**: Create an in-memory SQLite database using `sqlite3`. Load `posts_df` and `interactions_df` into tables named `posts` and `interactions` respectively.
+    *   Define `early_engagement_window_hours` as 24 hours.
+    *   Write a single SQL query that performs the following for *each post*, aggregating its interaction behavior *within the first 24 hours post-creation* (i.e., `interaction_timestamp` before `post_date + 24 hours`):
+        *   `num_likes_first_24h` (count of `interaction_id`s where `interaction_type` is 'like')
+        *   `num_comments_first_24h` (count of `interaction_id`s where `interaction_type` is 'comment')
+        *   `num_shares_first_24h` (count of `interaction_id`s where `interaction_type` is 'share')
+        *   `total_interactions_first_24h` (total count of `interaction_id`s for all types)
+        *   `unique_users_first_24h` (count of distinct `user_id`s who interacted with the post).
+    *   **Includes static post attributes**: `post_id`, `post_date`, `category`, `num_hashtags`, `sentiment_score`, `user_follower_count`.
+    *   **Ensures** all posts are included (using `LEFT JOIN`), showing 0 for counts if no activity in the 24-hour window.
+    *   The query should return `post_id`, `post_date`, `category`, `num_hashtags`, `sentiment_score`, `user_follower_count`, and all aggregated features.
+    *   **Hint**: Use `julianday()` for date/time comparisons. Aggregate features using `COALESCE` to handle `NULL`s from `LEFT JOIN`s.
 
-4.  **Data Visualization**: Create two separate plots to visually inspect relationships with `will_churn_in_next_90_days`:
-    *   A violin plot (or box plot) showing the distribution of `satisfaction_score` for non-churners (0) vs. churners (1). Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `will_churn_in_next_90_days` (0 or 1) across different `department` values. Ensure appropriate labels and titles.
+3. **Pandas Feature Engineering & Binary Target Creation (Viral Status)**: Fetch the SQL query results into a pandas DataFrame (`post_early_features_df`).
+    *   Handle `NaN` values: Fill `num_likes_first_24h`, `num_comments_first_24h`, `num_shares_first_24h`, `total_interactions_first_24h`, `unique_users_first_24h` with 0.
+    *   Convert `post_date` to datetime objects.
+    *   Calculate `engagement_rate_first_24h`: `total_interactions_first_24h` / (`user_follower_count` + 1). Fill `NaN` or `inf` with 0.
+    *   Calculate `share_comment_ratio_first_24h`: `num_shares_first_24h` / (`num_comments_first_24h` + 1). Fill `NaN` or `inf` with 0.
+    *   **Create the Binary Target `will_go_viral`**: Define `viral_window_days = 7`. A post is considered `viral` (1) if its total interactions (e.g., sum of `num_likes`, `num_comments`, `num_shares` from `interactions_df` within `post_date` and `post_date + pd.Timedelta(viral_window_days, 'days')`) for all `interaction_types` except 'view' (to focus on active engagement) exceeds the 90th percentile of all posts' total interactions in this window. Otherwise, `will_go_viral` is 0.
+        *   Merge this aggregate (max of 0/1 indicator) with `post_early_features_df` (left join), ensuring all posts have a target.
+    *   Define features `X` (numerical: `num_hashtags`, `sentiment_score`, `user_follower_count`, `num_likes_first_24h`, `num_comments_first_24h`, `num_shares_first_24h`, `total_interactions_first_24h`, `unique_users_first_24h`, `engagement_rate_first_24h`, `share_comment_ratio_first_24h`; categorical: `category`) and target `y` (`will_go_viral`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-5.  **ML Pipeline & Evaluation (Binary Classification)**: 
+4. **Data Visualization**: Create two separate plots to visually inspect relationships with `will_go_viral`:
+    *   A violin plot (or box plot) showing the distribution of `engagement_rate_first_24h` for non-viral (0) vs. viral (1) posts. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_go_viral` (0 or 1) across different `category` values. Ensure appropriate labels and titles.
+
+5. **ML Pipeline & Evaluation (Binary Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
@@ -43,11 +50,5 @@ Develop a machine learning pipeline to predict employee turnover (binary classif
     *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
-## Focus
-Employee Turnover Prediction (Binary Classification)
-
-## Dataset
-Synthetic employee profiles and performance review history.
-
 ## Hint
-Ensure your date comparisons in SQL correctly handle `NaT` (NULL) values for `last_promotion_date` and `exit_date`. When defining the target, carefully filter `performance_reviews` to ensure only reviews *before or on* the `GLOBAL_PREDICTION_CUTOFF_DATE` are used for features. For visualization, consider handling imbalanced classes if churn is rare.
+When creating the `will_go_viral` target, make sure to aggregate *all* interactions within the 7-day window for *each post* first, then calculate the 90th percentile threshold from this aggregated data, and finally apply it to determine the binary target for each post. Remember that 'view' interactions are often passive; focusing on 'like', 'comment', 'share' might better capture 'virality'.
