@@ -1,16 +1,52 @@
-# AI Daily Lab — 2026-05-08
+# AI Daily Lab — 2026-05-09
 
 ## Task
-Develop a machine learning pipeline to predict if a customer will **renew their subscription** at their next scheduled renewal point, based on their profile and recent application usage activity.
+Develop a machine learning pipeline to predict the **total quantity of products sold for each product category at each store location in the next 7 days**.
 
 ## Focus
-Binary Classification for Customer Subscription Renewal
+Time-series feature engineering, multi-key aggregations (store_id, product_category), regression modeling, and handling sparse combinations.
 
 ## Dataset
-Simulated customer profiles and application usage logs for a SaaS product.
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `stores_df`: With 100-150 rows. Columns: `store_id` (unique integers), `store_type` (e.g., 'Hypermarket', 'Supermarket', 'Convenience'), `region` (e.g., 'North', 'South', 'East', 'West'), `opening_date` (random dates over the last 5 years).
+    *   `products_df`: With 50-70 rows. Columns: `product_id` (unique integers), `product_category` (e.g., 'Dairy', 'Bakery', 'Produce', 'Snacks', 'Beverages', 'HomeGoods'), `unit_cost` (random floats 1.0-50.0), `retail_price` (random floats 1.5x - 3x `unit_cost`).
+    *   `sales_df`: With 50000-80000 rows. Columns: `sale_id` (unique integers), `store_id` (randomly sampled from `stores_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random dates *after* their respective `store_id`'s `opening_date` and up to `pd.Timestamp.now() - pd.Timedelta(weeks=2)`), `quantity_sold` (random integers 1-10), `revenue` (`quantity_sold` * `retail_price`).
+    *   **Simulate realistic patterns**: Ensure `sale_date` is always after `opening_date`. 'Hypermarket' stores should have generally higher `quantity_sold` per sale. 'Produce' and 'Dairy' categories might have higher transaction frequency but lower `quantity_sold` per transaction. Ensure a mix of high and low sales activity across different store-category combinations.
+    *   Sort `sales_df` by `store_id`, `product_id`, then `sale_date`.
+
+2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `stores_df`, `products_df`, and `sales_df` into tables named `stores`, `products`, and `sales` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 2 weeks prior to the latest `sale_date` in your generated `sales_df`.
+    *   Write a single SQL query that performs the following for *each unique combination of `store_id` and `product_category`*:
+        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
+        *   `total_quantity_prev_30d` (sum of `quantity_sold` in the 30 days ending at `current_cutoff_date`).
+        *   `total_revenue_prev_30d` (sum of `revenue` in the 30 days ending at `current_cutoff_date`).
+        *   `num_sales_days_prev_30d` (count of distinct `sale_date`s in the 30 days ending at `current_cutoff_date`).
+        *   `days_since_last_sale_at_cutoff`: Number of days between `current_cutoff_date` and the most recent `sale_date` for that `store_id` and `product_category` *before or on* the cutoff. Return a large number (e.g., 9999) if no sales before cutoff.
+        *   `avg_quantity_per_sale_prev_30d` (average `quantity_sold` per sale in the 30 days ending at `current_cutoff_date`).
+    *   **Includes static attributes**: `store_id`, `store_type`, `region`, `opening_date`, `product_category`.
+    *   **Ensures** all *potential* `(store_id, product_category)` pairs are included (using `CROSS JOIN` between distinct `stores.store_id` and `products.product_category`), showing 0 for counts/sums/averages if no activity in the 30-day window.
+    *   The query should return `store_id`, `store_type`, `region`, `opening_date`, `product_category`, `current_cutoff_date`, and all aggregated features.
+
+3.  **Pandas Feature Engineering & Regression Target Creation**: Fetch the SQL query results into a pandas DataFrame (`store_category_features_df`).
+    *   Convert `opening_date` and `current_cutoff_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated features (`total_quantity_prev_30d`, etc.) with 0 or 0.0 as appropriate. Fill `days_since_last_sale_at_cutoff` with 9999.
+    *   Calculate `days_since_store_opened_at_cutoff`: Number of days between `opening_date` and `current_cutoff_date`.
+    *   Calculate `avg_daily_quantity_prev_30d`: `total_quantity_prev_30d` / 30.0. Fill any `NaN` or `inf` with 0.
+    *   **Create the Regression Target `next_7d_category_sales_quantity`**: For *each `store_id`-`product_category` pair*, sum their `quantity_sold` from `sales_df` for all transactions that occurred *after* `current_cutoff_date` and *before or on* `current_cutoff_date + pd.Timedelta(days=7)`. Merge this sum into `store_category_features_df`, filling `NaN`s with 0 for pairs with no sales in the target window.
+    *   Define features `X` (numerical: `total_quantity_prev_30d`, `total_revenue_prev_30d`, `num_sales_days_prev_30d`, `days_since_last_sale_at_cutoff`, `avg_quantity_per_sale_prev_30d`, `days_since_store_opened_at_cutoff`, `avg_daily_quantity_prev_30d`; categorical: `store_type`, `region`, `product_category`) and target `y` (`next_7d_category_sales_quantity`). Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`).
+
+4.  **Data Visualization**: Create two separate plots to visually inspect relationships with `next_7d_category_sales_quantity` (the target):
+    *   A scatter plot showing `total_quantity_prev_30d` vs. `next_7d_category_sales_quantity`. Consider applying a `np.log1p` transformation to both axes if the distributions are heavily skewed to improve visibility of relationships.
+    *   A box plot (or violin plot) showing the distribution of `next_7d_category_sales_quantity` across different `store_type` values.
+    *   Ensure appropriate labels and titles for both plots.
+
+5.  **ML Pipeline & Evaluation (Regression)**:
+    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
+        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingRegressor` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict `next_7d_category_sales_quantity` on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.mean_absolute_error` and `sklearn.metrics.r2_score` for the test set predictions.
 
 ## Hint
-1. **Data Generation**: Create three DataFrames: `customers_df` (static profiles), `usage_df` (event logs), and `prediction_cutoff_df`. The `prediction_cutoff_df` is crucial; it should contain `customer_id`, `cutoff_date` (the date immediately before their *next scheduled renewal*), and the `will_renew` binary target (1 if they renewed after `cutoff_date`, 0 otherwise). Simulate declining usage activity for non-renewing customers *prior to their `cutoff_date`*.
-2. **SQL Feature Engineering**: Load `customers_df`, `usage_df`, and `prediction_cutoff_df` into SQLite. Your main query should `LEFT JOIN` `customers` with aggregated usage features derived *up to each customer's specific `cutoff_date`*. Use `julianday()` for date arithmetic in `WHERE` clauses for time-windowed aggregations. Remember `COALESCE` to handle `NULL` values from `LEFT JOIN` (e.g., 0 for counts/sums).
-3. **Pandas FE & Target**: After fetching SQL results, handle `NaN`s for aggregated features (e.g., 0 for counts/sums, a large number like 9999 for `days_since_last_activity_at_cutoff`). Ensure `will_renew` is correctly merged as your target. Calculate `customer_tenure_at_cutoff_days` as a useful feature.
-4. **ML Pipeline**: Use `sklearn.model_selection.train_test_split` with `stratify=y` to maintain class balance in training and testing sets, as renewal datasets can often be imbalanced. The `ColumnTransformer` should correctly apply `SimpleImputer` and `StandardScaler` to numerical features, and `OneHotEncoder` to categorical features.
+When constructing the SQL query, use a `CROSS JOIN` between distinct `store_id`s and distinct `product_category`s to create a base table of all possible combinations. Then, `LEFT JOIN` this base with your sales aggregates. Use `julianday()` for date comparisons in `WHERE` clauses and `COALESCE` to handle `NULL`s that arise from `LEFT JOIN`s where no sales occurred in the aggregation window.
