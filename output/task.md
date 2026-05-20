@@ -1,54 +1,59 @@
-# AI Daily Lab — 2026-05-18
+# AI Daily Lab — 2026-05-20
 
 ## Task
-Develop a machine learning pipeline to predict if a user will click on a given advertisement (binary classification - Click-Through Rate prediction) based on ad attributes, user profile, and historical interaction patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict the **box office success category** ('Flop', 'Moderate', 'Hit') of a movie at its pre-release stage, based on its budget, genre, director/lead actor's historical performance, and aggregated early pre-release buzz up to a fixed cutoff date.
 
 1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `age` (random integers 18-70), `gender` (e.g., 'Male', 'Female', 'Other'), `region` (e.g., 'North', 'South', 'East', 'West'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet').
-    *   `ads_df`: With 200-300 rows. Columns: `ad_id` (unique integers), `campaign_id` (random integers), `ad_type` (e.g., 'Banner', 'Video', 'Text'), `product_category` (e.g., 'Electronics', 'Fashion', 'Travel', 'Automotive'), `ad_creation_date` (random dates over the last 1.5 years).
-    *   `ad_impressions_df`: With 20000-30000 rows. Columns: `impression_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `ad_id` (randomly sampled from `ads_df` IDs), `impression_timestamp` (random datetimes over the last 1.5 years, *after* `ad_creation_date`), `clicked` (binary: 0 or 1).
-    *   **Simulate realistic patterns**: Ensure `impression_timestamp` is always after `ad_creation_date`. Simulate varying `clicked` probabilities: higher for certain `ad_type`s or `product_category`s. Younger users might click more on certain ads. Mobile users might have a different CTR. Create a slight imbalance (e.g., 10-15% click rate).
-    *   Sort `ad_impressions_df` by `impression_timestamp`.
+    *   `movies_df`: With 1000-1500 rows. Columns: `movie_id` (unique integers), `title` (unique strings), `genre` (e.g., 'Action', 'Comedy', 'Drama', 'Sci-Fi'), `budget_usd` (random floats 5M-300M), `director_id`, `lead_actor_id` (randomly sampled from `personnel_df` IDs), `release_date` (random dates over the last 5 years), `box_office_revenue_usd` (random floats 1M-1B - this will be used for target creation).
+    *   `personnel_df`: With 500-700 rows. Columns: `person_id` (unique integers), `name`, `role` (e.g., 'Director', 'Actor' - ensure a mix), `past_avg_rating` (random floats 2.0-4.5, for their past projects), `past_total_revenue` (random floats 100M-5B, for their past projects).
+    *   `pre_release_buzz_df`: With 3000-5000 rows. Columns: `buzz_id` (unique integers), `movie_id` (randomly sampled from `movies_df` IDs), `buzz_date` (random dates occurring *before* their respective `release_date` for each movie, e.g., 3-12 months prior), `trailer_views` (random integers 100K-50M), `social_mentions` (random integers 10K-1M).
+    *   **Simulate realistic patterns**: Ensure `buzz_date` is always before `release_date`. Higher `budget_usd` should correlate with higher `box_office_revenue_usd`. Higher `past_avg_rating` and `past_total_revenue` for director/actor should positively influence `box_office_revenue_usd`. Higher `trailer_views` and `social_mentions` should also positively influence `box_office_revenue_usd`. Create a class imbalance for success categories (e.g., more 'Moderate', fewer 'Hit').
+    *   Sort `pre_release_buzz_df` by `movie_id` then `buzz_date`.
 
-2.  **Load into SQLite & SQL Feature Engineering (Historical CTR Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `ads_df`, and `ad_impressions_df` into tables named `users`, `ads`, and `ad_impressions` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 2 weeks prior to the latest `impression_timestamp` in your generated `ad_impressions_df` (e.g., `ad_impressions_df['impression_timestamp'].max() - pd.Timedelta(weeks=2)`).
-    *   Write a single SQL query that performs the following for *each ad impression that occurs AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Joins `ad_impressions` (filtered for events after cutoff) with `users` and `ads`.
-        *   Aggregates historical features based on events *up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `user_avg_ctr_prev_7d_at_cutoff`: Average `clicked` for this `user_id` in the 7 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `ad_avg_ctr_prev_7d_at_cutoff`: Average `clicked` for this `ad_id` in the 7 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `campaign_avg_ctr_prev_7d_at_cutoff`: Average `clicked` for this `campaign_id` in the 7 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `num_impressions_user_prev_7d_at_cutoff`: Count of impressions for this `user_id` in the 7 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `num_impressions_ad_prev_7d_at_cutoff`: Count of impressions for this `ad_id` in the 7 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-        *   Extracts time-based features from the `impression_timestamp` of the current impression (e.g., `day_of_week`, `hour_of_day`, `month_of_year`).
-        *   Includes static attributes: `impression_id`, `user_id`, `ad_id`, `age`, `gender`, `region`, `device_type`, `ad_type`, `product_category`, `ad_creation_date`, and the target `clicked` for the current impression.
-    *   **Ensures** all impressions *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity).
-    *   **Hint**: You can first create CTEs for user/ad/campaign historical aggregates up to the cutoff, then join these CTEs with the filtered `ad_impressions` table.
+2.  **Load into SQLite & SQL Feature Engineering (Pre-release Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `movies_df`, `personnel_df`, and `pre_release_buzz_df` into tables named `movies`, `personnel`, and `pre_release_buzz` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 4 months prior to the latest `release_date` in your generated `movies_df` (e.g., `movies_df['release_date'].max() - pd.Timedelta(months=4)`). This represents the fixed point in time at which we are making predictions.
+    *   Write a single SQL query that performs the following for *each movie* that has its latest pre-release buzz *before or on* `GLOBAL_PREDICTION_CUTOFF_DATE`, and whose `release_date` is *after* `GLOBAL_PREDICTION_CUTOFF_DATE` (i.e., we are predicting for movies that haven't been released yet at the cutoff):
+        *   `movie_id`, `genre`, `budget_usd`.
+        *   `director_past_avg_rating`, `director_past_total_revenue` (from `personnel` table, assuming `role='Director'`).
+        *   `actor_past_avg_rating`, `actor_past_total_revenue` (from `personnel` table, assuming `role='Actor'`).
+        *   `total_trailer_views_at_cutoff`: Sum of `trailer_views` for that movie for all `buzz_date`s *on or before* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+        *   `total_social_mentions_at_cutoff`: Sum of `social_mentions` for that movie for all `buzz_date`s *on or before* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+        *   `days_from_cutoff_to_release`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and `release_date`.
+        *   Include the actual `box_office_revenue_usd` for target creation later.
+    *   **Ensures** only movies with relevant pre-release buzz up to the cutoff are included. Handle `NULL`s for aggregated buzz features (e.g., 0 for sums).
+    *   The query should return all mentioned fields.
+    *   **Hint**: Use CTEs for aggregating buzz and for handling director/actor joins. Use `julianday()` for date comparisons.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`impression_features_df`).
-    *   Convert all relevant date/datetime columns to appropriate types.
-    *   Handle `NaN` values: Fill numerical historical aggregates (e.g., CTRs) with a reasonable baseline (e.g., overall average CTR or 0.5) and counts with 0. Fill `days_since_ad_creation_at_impression` with a large number (e.g., 9999) if `ad_creation_date` is missing or after the impression. 
-    *   Calculate `days_since_ad_creation_at_impression`: Number of days between `ad_creation_date` and `impression_timestamp`.
-    *   Define features `X` (numerical: `age`, `user_avg_ctr_prev_7d_at_cutoff`, `ad_avg_ctr_prev_7d_at_cutoff`, `campaign_avg_ctr_prev_7d_at_cutoff`, `num_impressions_user_prev_7d_at_cutoff`, `num_impressions_ad_prev_7d_at_cutoff`, `day_of_week`, `hour_of_day`, `month_of_year`, `days_since_ad_creation_at_impression`; categorical: `gender`, `region`, `device_type`, `ad_type`, `product_category`) and target `y` (`clicked`).
+3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`movie_features_df`).
+    *   Convert `release_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated buzz features with 0. Fill director/actor `NaN`s with reasonable values (e.g., mean for ratings, 0 for revenue if person not found/data missing).
+    *   Create `budget_per_director_revenue`: `budget_usd` / (`director_past_total_revenue` + 1e6) to avoid division by zero. Fill `NaN`/`inf` with 0.
+    *   **Create the Multi-class Target `success_category`**: Based on `box_office_revenue_usd` (after cleaning any `NaN`s or extremely low/high values):
+        *   'Flop': If `box_office_revenue_usd` < $50,000,000
+        *   'Moderate': If $50,000,000 <= `box_office_revenue_usd` < $200,000,000
+        *   'Hit': If `box_office_revenue_usd` >= $200,000,000
+        (Adjust these thresholds based on the synthetic data distribution to ensure a reasonable class balance).
+    *   Define features `X` (numerical: `budget_usd`, `director_past_avg_rating`, `director_past_total_revenue`, `actor_past_avg_rating`, `actor_past_total_revenue`, `total_trailer_views_at_cutoff`, `total_social_mentions_at_cutoff`, `days_from_cutoff_to_release`, `budget_per_director_revenue`; categorical: `genre`) and target `y` (`success_category`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `clicked`:
-    *   A violin plot (or box plot) showing the distribution of `user_avg_ctr_prev_7d_at_cutoff` for non-clicked (0) vs. clicked (1) impressions. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `clicked` (0 or 1) across different `device_type` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `success_category`:
+    *   A box plot (or violin plot) showing the distribution of `budget_usd` for each `success_category`. Consider a log scale for `budget_usd` if distribution is highly skewed.
+    *   A stacked bar chart showing the proportion of `success_category` (across 'Flop', 'Moderate', 'Hit') for different `genre` values.
+    *   Ensure appropriate labels and titles for both plots.
 
-5.  **ML Pipeline & Evaluation (Binary Classification)**: 
+5.  **ML Pipeline & Evaluation (Multi-class Classification)**: 
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
     *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   Train the pipeline on `X_train`, `y_train`. Predict the `success_category` on the test set (`X_test`).
+    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Predictive analytics for digital advertising, feature engineering for event-level predictions, time-series aggregation with SQL, handling class imbalance.
+Multi-class Classification, Relational Feature Engineering, Time-aware Data Slicing (pre-release prediction), SQL Analytics
 
 ## Dataset
-Simulated digital advertising data including ad impressions, ad metadata, and user profiles.
+Synthetic data for movies, personnel (director/actors), and pre-release buzz.
 
 ## Hint
-When performing SQL aggregations for historical features (like `user_avg_ctr_prev_7d_at_cutoff`), ensure your filters correctly use `GLOBAL_PREDICTION_CUTOFF_DATE` to only consider events *before or on* that date. Use `COALESCE` to handle `NULL` values resulting from `LEFT JOIN`s or when no historical data exists for a user/ad/campaign within the aggregation window, setting defaults like 0 for counts and 0.0 or a global average for CTRs. For target creation, ensure you are using the `clicked` column directly from the feature-engineered DataFrame corresponding to impressions *after* the `GLOBAL_PREDICTION_CUTOFF_DATE`.
+When generating `box_office_revenue_usd`, ensure a distribution that allows for distinct 'Flop', 'Moderate', and 'Hit' categories. Pay close attention to the SQL query to correctly aggregate pre-release buzz *up to the global cutoff date* and join personnel data, handling potential `NULL`s for movies with missing buzz or less known personnel. Remember to filter movies such that their `release_date` is *after* your `GLOBAL_PREDICTION_CUTOFF_DATE` to simulate predicting future movie success.
