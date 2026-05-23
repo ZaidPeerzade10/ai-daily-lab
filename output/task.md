@@ -1,54 +1,53 @@
-# AI Daily Lab — 2026-05-22
+# AI Daily Lab — 2026-05-23
 
 ## Task
-Develop a machine learning pipeline to predict if a financial transaction is **fraudulent** (binary classification), based on transaction details and the account's historical behavior up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a user will **adopt a newly released product feature** within 7 days of its launch, based on their profile and historical interaction with features in the same category.
 
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `accounts_df`: With 1000-1500 rows. Columns: `account_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `account_type` (e.g., 'Standard', 'Premium', 'Basic'), `credit_limit` (random floats 1000-50000, higher for 'Premium').
-    *   `transactions_df`: With 20000-30000 rows. Columns: `transaction_id` (unique integers), `account_id` (randomly sampled from `accounts_df` IDs), `transaction_date` (random datetimes occurring *after* their respective `signup_date` and up to `pd.Timestamp.now()`), `amount` (random floats 10.0-5000.0), `transaction_type` (e.g., 'Online Purchase', 'POS Swipe', 'ATM Withdrawal', 'Transfer'), `location_city` (e.g., 'NYC', 'LA', 'Chicago', 'Remote', 'London'), `is_fraud` (binary: 0 or 1).
-    *   **Simulate realistic patterns**: Ensure `transaction_date` is always after `signup_date`. Introduce a small percentage (e.g., 3-5%) of `is_fraud=1`. Fraudulent transactions should tend to have: higher `amount` (e.g., 2x-5x average), often 'Online Purchase' or 'Remote' `location_city`, or occur at unusual `hour_of_day`. 'Premium' accounts might have higher `amount`s on average. Ensure a mix of transaction types and locations for each account.
-    *   Sort `transactions_df` by `account_id` then `transaction_date`.
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `country` (e.g., 'USA', 'CAN', 'GBR'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet'), `user_segment` (e.g., 'Early Adopter', 'Mainstream', 'Late Adopter').
+    *   `features_df`: With 50-100 rows. Columns: `feature_id` (unique integers), `feature_name` (unique strings), `release_date` (random dates over the last 2-3 years, ensuring varied categories released over time), `feature_category` (e.g., 'Communication', 'Content Creation', 'Discovery', 'Analytics').
+    *   `user_feature_interactions_df`: With 20000-30000 rows. Columns: `interaction_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `feature_id` (randomly sampled from `features_df` IDs), `interaction_timestamp` (random datetimes, *after* respective `signup_date` and *after* the `release_date` of the specific `feature_id`), `interaction_type` (e.g., 'Viewed', 'Clicked', 'Used_Once', 'Used_Multiple').
+    *   **Simulate realistic patterns**: Ensure `interaction_timestamp` is always after `signup_date` and the feature's `release_date`. Simulate varying interaction levels and adoption probabilities. 'Early Adopter' users should have a higher likelihood of using new features soon after `release_date`. Users with high historical activity in a `feature_category` should be more likely to interact with new features in the same category. Introduce a specific `TARGET_FEATURE_ID` (e.g., choose one from `features_df` with a `release_date` that allows for sufficient historical data for other features). Sort `user_feature_interactions_df` by `user_id` then `interaction_timestamp`.
 
-2.  **Load into SQLite & SQL Feature Engineering (Historical Transaction Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `accounts_df` and `transactions_df` into tables named `accounts` and `transactions` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `transaction_date` in your generated `transactions_df` (e.g., `transactions_df['transaction_date'].max() - pd.Timedelta(days=7)`).
-    *   Write a single SQL query that performs the following for *each transaction that occurred AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Joins the `transactions` (filtered for events after cutoff) with the `accounts` table.
-        *   Aggregates historical features *for the respective `account_id` up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `avg_amount_account_prev_30d`: Average `amount` for this `account_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `num_transactions_account_prev_30d`: Count of transactions for this `account_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `days_since_last_transaction_account_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `transaction_date` for this `account_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior transactions.
-            *   `num_distinct_locations_account_prev_30d`: Count of distinct `location_city` for this `account_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-        *   Extracts time-based features from the `transaction_date` of the *current* transaction (e.g., `hour_of_day`, `day_of_week`, `month_of_year`).
-        *   Includes static attributes: `transaction_id`, `account_id`, `amount`, `transaction_type`, `location_city`, `region`, `account_type`, `credit_limit`, and the target `is_fraud` for the current transaction.
-    *   **Ensures** all transactions *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity).
+2.  **Load into SQLite & SQL Feature Engineering (Historical Feature Interaction)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `features_df`, and `user_feature_interactions_df` into tables named `users`, `features`, and `interactions` respectively.
+    *   Select a `TARGET_FEATURE_ID` from your `features_df` (e.g., one with a `release_date` within the last year to ensure plenty of historical data for other features exists *before* it, and future adoption data exists *after* it). Define `GLOBAL_PREDICTION_CUTOFF_DATE` as the `release_date` of this `TARGET_FEATURE_ID`.
+    *   Write a single SQL query that performs the following for *each user*, aggregating their feature interaction behavior *up to `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself).
+        *   `target_feature_category` (the `feature_category` of `TARGET_FEATURE_ID`).
+        *   `num_total_interactions_prev_30d`: Count of all `interaction_id`s for the user in the 30 days ending at `current_cutoff_date`.
+        *   `num_distinct_features_used_prev_30d`: Count of distinct `feature_id`s used by the user in the 30 days ending at `current_cutoff_date`.
+        *   `num_interactions_target_category_prev_30d`: Count of `interaction_id`s for features in the `target_feature_category` by the user in the 30 days ending at `current_cutoff_date`.
+        *   `days_since_last_interaction_at_cutoff`: Number of days between `current_cutoff_date` and the most recent `interaction_timestamp` *before or on* the cutoff. Return a large number (e.g., 9999) if no interactions before cutoff.
+    *   **Includes static user attributes**: `user_id`, `signup_date`, `country`, `device_type`, `user_segment`.
+    *   **Ensures** all users are included (using `LEFT JOIN`), showing 0 for counts/sums if no activity in the 30-day window. Handle `NULL`s appropriately.
     *   The query should return all mentioned fields.
-    *   **Hint**: Use CTEs for pre-calculating account-level historical aggregates up to the `GLOBAL_PREDICTION_CUTOFF_DATE`, then join these with the future transactions.
+    *   **Hint**: Use CTEs for pre-calculating user-level historical aggregates up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Use `julianday()` for date comparisons.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`transaction_features_df`).
-    *   Convert all relevant date/datetime columns to appropriate types.
-    *   Handle `NaN` values: Fill numerical historical aggregates (e.g., averages, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_transaction_account_at_cutoff` with 9999.
-    *   Calculate `amount_ratio_to_credit_limit`: `amount` / (`credit_limit` + 1e-6) to avoid division by zero. Fill any `NaN` or `inf` with 0.
-    *   Define features `X` (numerical: `amount`, `credit_limit`, `avg_amount_account_prev_30d`, `num_transactions_account_prev_30d`, `days_since_last_transaction_account_at_cutoff`, `num_distinct_locations_account_prev_30d`, `hour_of_day`, `day_of_week`, `month_of_year`, `amount_ratio_to_credit_limit`; categorical: `region`, `account_type`, `transaction_type`, `location_city`) and target `y` (`is_fraud`).
-    *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` to handle class imbalance).
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`user_features_df`).
+    *   Convert `signup_date` and `current_cutoff_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated features with 0 or 0.0 as appropriate. Fill `days_since_last_interaction_at_cutoff` with 9999.
+    *   Calculate `user_tenure_at_cutoff_days`: Number of days between `signup_date` and `current_cutoff_date`.
+    *   **Create the Binary Target `will_adopt_target_feature_in_7d`**: For *each user*, determine if they had *any 'Used_Once' or 'Used_Multiple' interaction* with the `TARGET_FEATURE_ID` between `current_cutoff_date` (exclusive) and `current_cutoff_date + pd.Timedelta(days=7)` (inclusive). Merge this binary target (1 if adopted, 0 if not) with `user_features_df`, filling `NaN`s with 0 for users who did not adopt or had no relevant interactions.
+    *   Define features `X` (numerical: `num_total_interactions_prev_30d`, `num_distinct_features_used_prev_30d`, `num_interactions_target_category_prev_30d`, `days_since_last_interaction_at_cutoff`, `user_tenure_at_cutoff_days`; categorical: `country`, `device_type`, `user_segment`, `target_feature_category`) and target `y` (`will_adopt_target_feature_in_7d`).
+    *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_fraud`:
-    *   A violin plot (or box plot) showing the distribution of `amount` for non-fraudulent (0) vs. fraudulent (1) transactions. Consider applying a log transformation to `amount` if the distribution is heavily skewed to improve visibility of relationships.
-    *   A stacked bar chart showing the proportion of `is_fraud` (0 or 1) across different `transaction_type` values.
-    *   Ensure appropriate labels and titles for both plots.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_adopt_target_feature_in_7d`:
+    *   A violin plot (or box plot) showing the distribution of `num_interactions_target_category_prev_30d` for non-adopters (0) vs. adopters (1). Consider a log scale if the distribution is highly skewed.
+    *   A stacked bar chart showing the proportion of `will_adopt_target_feature_in_7d` (0 or 1) across different `user_segment` values. Ensure appropriate labels and titles for both plots.
 
 5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to imbalance).
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
     *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Transaction Fraud Detection (Binary Classification)
+User Behavior Prediction, Feature Adoption, Time-Windowed Feature Engineering, Binary Classification
 
 ## Dataset
-Synthetic financial transactions and account details.
+Synthetic data: User profiles, product feature release dates, and historical user-feature interaction logs.
 
 ## Hint
-Pay close attention to defining the `GLOBAL_PREDICTION_CUTOFF_DATE` and ensuring all historical features are calculated *only* using data up to this fixed point, applied to predict future transactions. The `stratify` parameter in `train_test_split` and `class_weight` in `HistGradientBoostingClassifier` are crucial for handling the rare `is_fraud=1` class.
+When generating synthetic data, explicitly define a `TARGET_FEATURE_ID` and its `release_date`. This `release_date` will serve as your `GLOBAL_PREDICTION_CUTOFF_DATE`. Ensure your SQL query correctly aggregates historical interactions *before or on* this cutoff and your Pandas target creation looks for adoption of *that specific feature* *after* this cutoff within the 7-day window. Pay attention to date comparisons and `LEFT JOIN` handling of users with no prior activity. Be careful with the `interaction_type` to define 'adoption'.
