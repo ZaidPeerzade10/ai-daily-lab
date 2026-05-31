@@ -1,54 +1,57 @@
-# AI Daily Lab — 2026-05-30
+# AI Daily Lab — 2026-05-31
 
 ## Task
-Develop a machine learning pipeline to predict the **demand category** ('Low', 'Medium', 'High') for an individual e-commerce product in the next 14 days, based on its attributes and historical sales data up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a newly published news article will achieve **'High Engagement'** (binary classification) within its first 48 hours post-publication, based on article metadata, author profile, and its initial engagement signals observed within the first 6 hours post-publication, all observed up to a fixed `GLOBAL_PREDICTION_CUTOFF_DATE`.
 
-## Focus
-Inventory Management, Demand Forecasting, Multi-class Classification, Time-Series Feature Engineering
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `articles_df`: With 1000-1500 rows. Columns: `article_id` (unique integers), `author_id` (randomly sampled from `authors_df` IDs), `publish_date` (random datetimes over the last 2-3 years), `category` (e.g., 'Politics', 'Tech', 'Sports', 'Lifestyle'), `sentiment_score` (random floats 0.1-0.9), `word_count` (random integers 200-1500), `_actual_48h_engagement_score` (random floats 0-1000 for target creation, simulating total likes+shares+comments in first 48h).
+    *   `authors_df`: With 200-300 rows. Columns: `author_id` (unique integers), `author_tier` (e.g., 'Junior', 'Mid', 'Senior'), `past_avg_article_engagement` (random floats 0-100, representing historical engagement of their articles).
+    *   `engagement_events_df`: With 20000-30000 rows. Columns: `event_id` (unique integers), `article_id` (randomly sampled from `articles_df` IDs), `event_timestamp` (random datetimes, *after* respective `publish_date`), `event_type` (e.g., 'view', 'like', 'share', 'comment').
+    *   **Simulate realistic patterns**: Ensure `event_timestamp` is always after `publish_date`. Higher `sentiment_score`, `word_count`, 'Senior' `author_tier`, and higher `past_avg_article_engagement` should correlate with higher `_actual_48h_engagement_score`. A higher proportion of 'like', 'share', 'comment' events within the first 6 hours should also correlate. Ensure `engagement_events_df` has events within the first 6 hours for most articles and then some for the full 48-hour window. 
+    *   Sort `engagement_events_df` by `article_id` then `event_timestamp`.
 
-## Dataset
-Synthetic e-commerce product and sales data.
-
-## Hint
-1.  **Synthetic Data Generation (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `products_df`: With 1000-1500 rows. Columns: `product_id` (unique integers), `category` (e.g., 'Electronics', 'Apparel', 'Home Goods'), `brand` (e.g., 'BrandX', 'BrandY', 'BrandZ'), `base_price` (random floats 10-1000), `launch_date` (random dates over the last 3-5 years).
-    *   `sales_df`: With 20000-30000 rows. Columns: `sale_id` (unique integers), `product_id` (randomly sampled from `products_df` IDs), `sale_date` (random datetimes occurring *after* their respective `launch_date` and up to `pd.Timestamp.now() - pd.Timedelta(weeks=2)`), `quantity_sold` (random integers 1-20).
-    *   **Simulate realistic patterns**: Ensure `sale_date` is always after `launch_date`. Simulate varying sales patterns: some products with consistently high demand, others low, and some with mild seasonality. `quantity_sold` should vary realistically. Some product categories/brands should naturally have higher sales. Ensure sales for a product gradually decrease if it's an older product. Sort `sales_df` by `product_id` then `sale_date`.
-
-2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Sales Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df` and `sales_df` into tables named `products` and `sales` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 2 months prior to the latest `sale_date` in your generated `sales_df` (e.g., `sales_df['sale_date'].max() - pd.Timedelta(months=2)`).
-    *   Write a single SQL query that performs the following for *each product*, aggregating its sales behavior *within the 30 days immediately preceding `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
-        *   `avg_qty_sold_prev_30d` (average `quantity_sold`).
-        *   `total_qty_sold_prev_30d` (sum of `quantity_sold`).
-        *   `num_sales_prev_30d` (count of sales).
-        *   `days_since_last_sale_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `sale_date` *before or on* the cutoff. Return a large number (e.g., 9999) if no sales before cutoff.
-    *   **Includes static product attributes**: `product_id`, `category`, `brand`, `base_price`, `launch_date`.
-    *   **Ensures** all products are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no sales in the 30-day window. Handle `NULL`s appropriately.
+2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `articles_df`, `authors_df`, and `engagement_events_df` into tables named `articles`, `authors`, and `engagement_events` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 4 weeks prior to the latest `event_timestamp` in your generated `engagement_events_df`.
+    *   Write a single SQL query that performs the following for *each article* where:
+        *   Its `publish_date` is *before or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+        *   Its 6-hour initial observation window (`publish_date + 6 hours`) is *also before or on* `GLOBAL_PREDICTION_CUTOFF_DATE`. (This ensures all initial 6-hour engagement data is observed by the cutoff).
+        *   Its 48-hour target window (`publish_date + 48 hours`) is *before or on* the latest `event_timestamp` in the full `engagement_events_df` (to ensure the target `_actual_48h_engagement_score` has fully materialized).
+    *   The query should extract:
+        *   `article_id`, `publish_date`, `category`, `sentiment_score`, `word_count`, `_actual_48h_engagement_score` (from `articles` table).
+        *   `author_tier`, `past_avg_article_engagement` (from `authors` table).
+        *   **Aggregations from `engagement_events` *for the first 6 hours post-publication* (i.e., `event_timestamp` between `publish_date` and `publish_date + 6 hours`)**: `num_views_first_6h` (count of 'view' events), `num_likes_first_6h` (count of 'like' events), `num_shares_first_6h` (count of 'share' events), `num_comments_first_6h` (count of 'comment' events).
+        *   **Time-based features from `publish_date`**: `publish_day_of_week` (0-6), `publish_hour_of_day` (0-23).
+    *   **Ensures** only suitable articles are included. Handle `NULL`s for aggregated engagement features (e.g., 0 for counts).
     *   The query should return all mentioned fields.
 
-3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
-    *   Convert `launch_date` and `current_cutoff_date` to datetime objects.
-    *   Handle `NaN` values: Fill numerical aggregated features with 0 or 0.0 as appropriate. Fill `days_since_last_sale_at_cutoff` with 9999. Fill `base_price` NaNs with median.
-    *   Calculate `product_age_at_cutoff_days`: Number of days between `launch_date` and `current_cutoff_date`.
-    *   **Create the Multi-class Target `next_14d_demand_category`**: For *each product*, sum their `quantity_sold` from the `sales_df` for all sales that occurred *after* `current_cutoff_date` and *before or on* `current_cutoff_date + pd.Timedelta(days=14)`. Let this sum be `next_14d_total_qty_sold`.
-    *   Merge this `next_14d_total_qty_sold` into `product_features_df`, filling `NaN`s with 0 for products with no sales in the target window.
-    *   Categorize `next_14d_total_qty_sold` into:
-        *   'Low': if `next_14d_total_qty_sold` <= 10
-        *   'Medium': if 10 < `next_14d_total_qty_sold` <= 50
-        *   'High': if `next_14d_total_qty_sold` > 50
-        (Adjust these thresholds based on your data distribution to ensure a reasonable class balance).
-    *   Define features `X` (numerical: `base_price`, `avg_qty_sold_prev_30d`, `total_qty_sold_prev_30d`, `num_sales_prev_30d`, `days_since_last_sale_at_cutoff`, `product_age_at_cutoff_days`; categorical: `category`, `brand`) and target `y` (`next_14d_demand_category`).
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`article_features_df`).
+    *   Convert `publish_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated features (e.g., `num_views_first_6h`) with 0. Fill `sentiment_score` with its mean, `word_count` with its median, and `past_avg_article_engagement` with 0 for authors not found.
+    *   Calculate `engagement_rate_first_6h`: (`num_likes_first_6h` + `num_shares_first_6h` + `num_comments_first_6h`) / (`num_views_first_6h` + 1e-6) to avoid division by zero. Fill any `NaN` or `inf` with 0.
+    *   **Create the Binary Target `will_be_high_engagement`**: Based on `_actual_48h_engagement_score`:
+        *   'High Engagement' (1): If `_actual_48h_engagement_score` > (80th percentile of `_actual_48h_engagement_score`)
+        *   'Not High Engagement' (0): Otherwise
+        (Adjust the percentile threshold dynamically based on your synthetic data distribution to ensure a reasonable class balance, e.g., 15-25% positive class).
+    *   Define features `X` (numerical: `sentiment_score`, `word_count`, `past_avg_article_engagement`, `num_views_first_6h`, `num_likes_first_6h`, `num_shares_first_6h`, `num_comments_first_6h`, `engagement_rate_first_6h`, `publish_day_of_week`, `publish_hour_of_day`; categorical: `category`, `author_tier`) and target `y` (`will_be_high_engagement`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `next_14d_demand_category`:
-    *   A violin plot (or box plot) showing the distribution of `total_qty_sold_prev_30d` for each `next_14d_demand_category`. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `next_14d_demand_category` (across 'Low', 'Medium', 'High') for different `category` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_be_high_engagement`:
+    *   A violin plot (or box plot) showing the distribution of `engagement_rate_first_6h` for non-high-engagement (0) vs. high-engagement (1) articles. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_be_high_engagement` (0 or 1) across different `category` values. Ensure appropriate labels and titles.
 
-5.  **ML Pipeline & Evaluation (Multi-class Classification)**: 
+5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict the `next_14d_demand_category` on the test set (`X_test`).
-    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+
+## Focus
+Time-Series Feature Engineering for Binary Classification
+
+## Dataset
+News Article Engagement Prediction
+
+## Hint
+Pay close attention to defining time windows for feature aggregation and target creation to avoid data leakage. When joining in SQL for initial engagement, remember to filter `engagement_events` by `event_timestamp BETWEEN publish_date AND (publish_date + 6 hours)` for each article. Use CTEs in SQL for clarity, especially when handling date arithmetic with `julianday()`.
