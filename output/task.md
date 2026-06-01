@@ -1,57 +1,13 @@
-# AI Daily Lab — 2026-05-31
+# AI Daily Lab — 2026-06-01
 
 ## Task
-Develop a machine learning pipeline to predict if a newly published news article will achieve **'High Engagement'** (binary classification) within its first 48 hours post-publication, based on article metadata, author profile, and its initial engagement signals observed within the first 6 hours post-publication, all observed up to a fixed `GLOBAL_PREDICTION_CUTOFF_DATE`.
-
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `articles_df`: With 1000-1500 rows. Columns: `article_id` (unique integers), `author_id` (randomly sampled from `authors_df` IDs), `publish_date` (random datetimes over the last 2-3 years), `category` (e.g., 'Politics', 'Tech', 'Sports', 'Lifestyle'), `sentiment_score` (random floats 0.1-0.9), `word_count` (random integers 200-1500), `_actual_48h_engagement_score` (random floats 0-1000 for target creation, simulating total likes+shares+comments in first 48h).
-    *   `authors_df`: With 200-300 rows. Columns: `author_id` (unique integers), `author_tier` (e.g., 'Junior', 'Mid', 'Senior'), `past_avg_article_engagement` (random floats 0-100, representing historical engagement of their articles).
-    *   `engagement_events_df`: With 20000-30000 rows. Columns: `event_id` (unique integers), `article_id` (randomly sampled from `articles_df` IDs), `event_timestamp` (random datetimes, *after* respective `publish_date`), `event_type` (e.g., 'view', 'like', 'share', 'comment').
-    *   **Simulate realistic patterns**: Ensure `event_timestamp` is always after `publish_date`. Higher `sentiment_score`, `word_count`, 'Senior' `author_tier`, and higher `past_avg_article_engagement` should correlate with higher `_actual_48h_engagement_score`. A higher proportion of 'like', 'share', 'comment' events within the first 6 hours should also correlate. Ensure `engagement_events_df` has events within the first 6 hours for most articles and then some for the full 48-hour window. 
-    *   Sort `engagement_events_df` by `article_id` then `event_timestamp`.
-
-2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `articles_df`, `authors_df`, and `engagement_events_df` into tables named `articles`, `authors`, and `engagement_events` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 4 weeks prior to the latest `event_timestamp` in your generated `engagement_events_df`.
-    *   Write a single SQL query that performs the following for *each article* where:
-        *   Its `publish_date` is *before or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-        *   Its 6-hour initial observation window (`publish_date + 6 hours`) is *also before or on* `GLOBAL_PREDICTION_CUTOFF_DATE`. (This ensures all initial 6-hour engagement data is observed by the cutoff).
-        *   Its 48-hour target window (`publish_date + 48 hours`) is *before or on* the latest `event_timestamp` in the full `engagement_events_df` (to ensure the target `_actual_48h_engagement_score` has fully materialized).
-    *   The query should extract:
-        *   `article_id`, `publish_date`, `category`, `sentiment_score`, `word_count`, `_actual_48h_engagement_score` (from `articles` table).
-        *   `author_tier`, `past_avg_article_engagement` (from `authors` table).
-        *   **Aggregations from `engagement_events` *for the first 6 hours post-publication* (i.e., `event_timestamp` between `publish_date` and `publish_date + 6 hours`)**: `num_views_first_6h` (count of 'view' events), `num_likes_first_6h` (count of 'like' events), `num_shares_first_6h` (count of 'share' events), `num_comments_first_6h` (count of 'comment' events).
-        *   **Time-based features from `publish_date`**: `publish_day_of_week` (0-6), `publish_hour_of_day` (0-23).
-    *   **Ensures** only suitable articles are included. Handle `NULL`s for aggregated engagement features (e.g., 0 for counts).
-    *   The query should return all mentioned fields.
-
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`article_features_df`).
-    *   Convert `publish_date` to datetime objects.
-    *   Handle `NaN` values: Fill numerical aggregated features (e.g., `num_views_first_6h`) with 0. Fill `sentiment_score` with its mean, `word_count` with its median, and `past_avg_article_engagement` with 0 for authors not found.
-    *   Calculate `engagement_rate_first_6h`: (`num_likes_first_6h` + `num_shares_first_6h` + `num_comments_first_6h`) / (`num_views_first_6h` + 1e-6) to avoid division by zero. Fill any `NaN` or `inf` with 0.
-    *   **Create the Binary Target `will_be_high_engagement`**: Based on `_actual_48h_engagement_score`:
-        *   'High Engagement' (1): If `_actual_48h_engagement_score` > (80th percentile of `_actual_48h_engagement_score`)
-        *   'Not High Engagement' (0): Otherwise
-        (Adjust the percentile threshold dynamically based on your synthetic data distribution to ensure a reasonable class balance, e.g., 15-25% positive class).
-    *   Define features `X` (numerical: `sentiment_score`, `word_count`, `past_avg_article_engagement`, `num_views_first_6h`, `num_likes_first_6h`, `num_shares_first_6h`, `num_comments_first_6h`, `engagement_rate_first_6h`, `publish_day_of_week`, `publish_hour_of_day`; categorical: `category`, `author_tier`) and target `y` (`will_be_high_engagement`).
-    *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
-
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_be_high_engagement`:
-    *   A violin plot (or box plot) showing the distribution of `engagement_rate_first_6h` for non-high-engagement (0) vs. high-engagement (1) articles. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `will_be_high_engagement` (0 or 1) across different `category` values. Ensure appropriate labels and titles.
-
-5.  **ML Pipeline & Evaluation (Binary Classification)**:
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Develop a machine learning pipeline to predict if a piece of industrial equipment will require maintenance within the next 7 days, based on its static attributes, recent sensor readings, and historical maintenance log up to a specific cutoff date.
 
 ## Focus
-Time-Series Feature Engineering for Binary Classification
+Time-series feature engineering, binary classification, class imbalance handling.
 
 ## Dataset
-News Article Engagement Prediction
+Simulated industrial equipment data including static attributes, sensor readings (temperature, vibration, pressure), and maintenance logs (type, cost, date).
 
 ## Hint
-Pay close attention to defining time windows for feature aggregation and target creation to avoid data leakage. When joining in SQL for initial engagement, remember to filter `engagement_events` by `event_timestamp BETWEEN publish_date AND (publish_date + 6 hours)` for each article. Use CTEs in SQL for clarity, especially when handling date arithmetic with `julianday()`.
+Pay close attention to time window definitions in SQL for aggregating sensor data (e.g., last 24 hours) and historical maintenance (e.g., last 90 days), all relative to the `GLOBAL_PREDICTION_CUTOFF_DATE`. When creating the target, iterate through each `equipment_id` and check for any maintenance event in the 7-day future window. Remember to use `class_weight='balanced'` in your classifier due to potential maintenance event imbalance.
