@@ -1,13 +1,49 @@
-# AI Daily Lab — 2026-06-01
+# AI Daily Lab — 2026-06-02
 
 ## Task
-Develop a machine learning pipeline to predict if a piece of industrial equipment will require maintenance within the next 7 days, based on its static attributes, recent sensor readings, and historical maintenance log up to a specific cutoff date.
+Develop a machine learning pipeline to predict if an employee will **attrit** (binary classification) within the next 6 months, based on their profile, performance metrics, and recent work activity up to a specific cutoff date.
 
 ## Focus
-Time-series feature engineering, binary classification, class imbalance handling.
+Predictive analytics, time-series feature engineering, class imbalance handling, ML pipeline construction, model evaluation for binary classification.
 
 ## Dataset
-Simulated industrial equipment data including static attributes, sensor readings (temperature, vibration, pressure), and maintenance logs (type, cost, date).
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `employees_df`: With 1000-1500 rows. Columns: `employee_id` (unique integers), `hire_date` (random dates over the last 5-10 years), `department` (e.g., 'Sales', 'Engineering', 'HR', 'Marketing'), `salary` (random floats 50000-200000), `performance_rating` (random integers 1-5), `satisfaction_score` (random floats 1.0-5.0), `last_promotion_date` (random dates *after* `hire_date` or `NaT` if no promotion), `attrition_date` (random dates, for ~15-20% of employees, occurring *after* `hire_date` and within the last 18 months, `NaT` otherwise).
+    *   `work_activity_df`: With 20000-30000 rows. Columns: `activity_id` (unique integers), `employee_id` (randomly sampled from `employees_df` IDs), `activity_date` (random datetimes occurring *after* their respective `hire_date` and *before* `attrition_date` if applicable, up to `pd.Timestamp.now()`), `hours_worked` (random floats 4.0-12.0), `project_count` (random integers 1-5).
+    *   **Simulate realistic patterns**: Ensure `activity_date` is always after `hire_date` and before `attrition_date`. Simulate varying activity levels: some employees are very active, others less so. Employees with lower `satisfaction_score` or `performance_rating` might have a higher likelihood of `attrition_date`. Employees nearing `attrition_date` might show a drop-off in `hours_worked` or `project_count` in the 1-2 months leading up to their `attrition_date`. Employees in certain `department`s could have higher attrition. Sort `work_activity_df` by `employee_id` then `activity_date`.
+
+2.  **Load into SQLite & SQL Feature Engineering (Recent Activity & Profile Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `employees_df` and `work_activity_df` into tables named `employees` and `work_activity` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 6 months prior to the latest `activity_date` in your generated `work_activity_df` (e.g., `work_activity_df['activity_date'].max() - pd.Timedelta(months=6)`).
+    *   Write a single SQL query that performs the following for *each employee active at `GLOBAL_PREDICTION_CUTOFF_DATE`* (i.e., `hire_date` <= cutoff and `attrition_date` is `NULL` or `attrition_date` > cutoff):
+        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
+        *   `avg_hours_worked_prev_90d` (average `hours_worked` for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
+        *   `num_activities_prev_90d` (count of `activity_id`s for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
+        *   `num_distinct_projects_prev_90d` (count of distinct `project_count` values for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
+        *   `days_since_last_activity_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `activity_date` for the employee *before or on* the cutoff. Return a large number (e.g., 9999) if no activities before cutoff.
+    *   **Includes static employee attributes**: `employee_id`, `hire_date`, `department`, `salary`, `performance_rating`, `satisfaction_score`, `last_promotion_date`, and the actual `attrition_date` (for target creation).
+    *   **Ensures** all relevant employees are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no activity in the 90-day window. Handle `NULL`s appropriately.
+    *   The query should return all mentioned fields.
+
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`employee_features_df`).
+    *   Convert all relevant date columns (`hire_date`, `current_cutoff_date`, `last_promotion_date`, `attrition_date`) to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated features (`avg_hours_worked_prev_90d`, etc.) with 0 or 0.0 as appropriate. Fill `days_since_last_activity_at_cutoff` with 9999. For `last_promotion_date` (if NaT), `days_since_last_promotion_at_cutoff` will be a large number (e.g., tenure).
+    *   Calculate `employee_tenure_at_cutoff_days`: Number of days between `hire_date` and `current_cutoff_date`.
+    *   Calculate `days_since_last_promotion_at_cutoff`: Number of days between `last_promotion_date` and `current_cutoff_date`. If `last_promotion_date` is NaT or after cutoff, fill with `employee_tenure_at_cutoff_days` (or a large number).
+    *   **Create the Binary Target `will_attrit_in_next_6_months`**: For *each employee*, determine if their simulated `attrition_date` falls within the 6-month period *immediately following* their `current_cutoff_date` (exclusive of cutoff, inclusive of cutoff + 6 months). Merge this target (1 if yes, 0 if no) with `employee_features_df`, filling `NaN`s with 0 for employees who did not attrit or whose attrition date falls outside the window.
+    *   Define features `X` (numerical: `salary`, `performance_rating`, `satisfaction_score`, `avg_hours_worked_prev_90d`, `num_activities_prev_90d`, `num_distinct_projects_prev_90d`, `days_since_last_activity_at_cutoff`, `employee_tenure_at_cutoff_days`, `days_since_last_promotion_at_cutoff`; categorical: `department`) and target `y` (`will_attrit_in_next_6_months`).
+    *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
+
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_attrit_in_next_6_months`:
+    *   A violin plot (or box plot) showing the distribution of `satisfaction_score` for non-attriters (0) vs. attriters (1). Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_attrit_in_next_6_months` (0 or 1) across different `department` values. Ensure appropriate labels and titles.
+
+5.  **ML Pipeline & Evaluation (Binary Classification)**:
+    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
+        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
+        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-Pay close attention to time window definitions in SQL for aggregating sensor data (e.g., last 24 hours) and historical maintenance (e.g., last 90 days), all relative to the `GLOBAL_PREDICTION_CUTOFF_DATE`. When creating the target, iterate through each `equipment_id` and check for any maintenance event in the 7-day future window. Remember to use `class_weight='balanced'` in your classifier due to potential maintenance event imbalance.
+When simulating `attrition_date`, ensure there's a good mix of employees who attrit and those who don't. For `days_since_last_promotion_at_cutoff`, if an employee has never been promoted or their last promotion was after the cutoff, the 'days since' should reflect their tenure up to the cutoff date. Pay close attention to the time windows for SQL aggregations and target definition to avoid data leakage. The `stratify` parameter in `train_test_split` is crucial for handling class imbalance.

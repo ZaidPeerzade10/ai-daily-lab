@@ -1,3 +1,4 @@
 {
-  "2026-06-01": "Develop a machine learning pipeline to predict if a piece of industrial equipment will require maintenance within the next 7 days, based on its static attributes, recent sensor readings, and historical maintenance log up to a specific cutoff date."
+  "2026-06-01": "Develop a machine learning pipeline to predict if a piece of industrial equipment will require maintenance within the next 7 days, based on its static attributes, recent sensor readings, and historical maintenance log up to a specific cutoff date.",
+  "2026-06-02": "Develop a machine learning pipeline to predict if an employee will **attrit** (binary classification) within the next 6 months, based on their profile, performance metrics, and recent work activity up to a specific cutoff date."
 }
