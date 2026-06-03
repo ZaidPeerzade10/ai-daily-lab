@@ -1,49 +1,55 @@
-# AI Daily Lab — 2026-06-02
+# AI Daily Lab — 2026-06-03
 
 ## Task
-Develop a machine learning pipeline to predict if an employee will **attrit** (binary classification) within the next 6 months, based on their profile, performance metrics, and recent work activity up to a specific cutoff date.
+Develop a machine learning pipeline to predict the **next product category** a customer will purchase ('Electronics', 'Fashion', 'Home Goods', 'Books', 'Other') within the next 30 days, based on their profile and historical purchase patterns up to a specific cutoff date.
 
-## Focus
-Predictive analytics, time-series feature engineering, class imbalance handling, ML pipeline construction, model evaluation for binary classification.
+1.  **Synthetic Data Generation (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `customers_df`: With 1000-1500 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `loyalty_tier` (e.g., 'Bronze', 'Silver', 'Gold').
+    *   `products_df`: With 100-200 rows. Columns: `product_id` (unique integers), `product_name` (unique strings), `category` (e.g., 'Electronics', 'Fashion', 'Home Goods', 'Books', 'Groceries', 'Toys', 'Sports').
+    *   `orders_df`: With 20000-30000 rows. Columns: `order_item_id` (unique integers, representing individual items in an order), `customer_id` (randomly sampled from `customers_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `order_date` (random datetimes occurring *after* their respective `signup_date` and up to `pd.Timestamp.now()`).
+    *   **Simulate realistic patterns**: Ensure `order_date` is always after `signup_date`. Simulate varying purchase habits: 'Gold' tier customers might have more frequent orders. Customers tend to show preferences for certain categories over time. A small percentage of customers might frequently switch categories. Ensure a good mix of categories purchased. Assign `product_id` to `orders_df` such that `category` can be derived. 
+    *   Sort `orders_df` by `customer_id` then `order_date`.
 
-## Dataset
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
-    *   `employees_df`: With 1000-1500 rows. Columns: `employee_id` (unique integers), `hire_date` (random dates over the last 5-10 years), `department` (e.g., 'Sales', 'Engineering', 'HR', 'Marketing'), `salary` (random floats 50000-200000), `performance_rating` (random integers 1-5), `satisfaction_score` (random floats 1.0-5.0), `last_promotion_date` (random dates *after* `hire_date` or `NaT` if no promotion), `attrition_date` (random dates, for ~15-20% of employees, occurring *after* `hire_date` and within the last 18 months, `NaT` otherwise).
-    *   `work_activity_df`: With 20000-30000 rows. Columns: `activity_id` (unique integers), `employee_id` (randomly sampled from `employees_df` IDs), `activity_date` (random datetimes occurring *after* their respective `hire_date` and *before* `attrition_date` if applicable, up to `pd.Timestamp.now()`), `hours_worked` (random floats 4.0-12.0), `project_count` (random integers 1-5).
-    *   **Simulate realistic patterns**: Ensure `activity_date` is always after `hire_date` and before `attrition_date`. Simulate varying activity levels: some employees are very active, others less so. Employees with lower `satisfaction_score` or `performance_rating` might have a higher likelihood of `attrition_date`. Employees nearing `attrition_date` might show a drop-off in `hours_worked` or `project_count` in the 1-2 months leading up to their `attrition_date`. Employees in certain `department`s could have higher attrition. Sort `work_activity_df` by `employee_id` then `activity_date`.
-
-2.  **Load into SQLite & SQL Feature Engineering (Recent Activity & Profile Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `employees_df` and `work_activity_df` into tables named `employees` and `work_activity` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 6 months prior to the latest `activity_date` in your generated `work_activity_df` (e.g., `work_activity_df['activity_date'].max() - pd.Timedelta(months=6)`).
-    *   Write a single SQL query that performs the following for *each employee active at `GLOBAL_PREDICTION_CUTOFF_DATE`* (i.e., `hire_date` <= cutoff and `attrition_date` is `NULL` or `attrition_date` > cutoff):
+2.  **Load into SQLite & SQL Feature Engineering (Historical Purchase Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `customers_df`, `products_df`, and `orders_df` into tables named `customers`, `products`, and `orders` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 30 days prior to the latest `order_date` in your generated `orders_df` (e.g., `orders_df['order_date'].max() - pd.Timedelta(days=30)`).
+    *   Write a single SQL query that performs the following for *each customer*, aggregating their purchase behavior *up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
         *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
-        *   `avg_hours_worked_prev_90d` (average `hours_worked` for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
-        *   `num_activities_prev_90d` (count of `activity_id`s for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
-        *   `num_distinct_projects_prev_90d` (count of distinct `project_count` values for the employee in the 90 days *preceding or on* `GLOBAL_PREDICTION_CUTOFF_DATE`).
-        *   `days_since_last_activity_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `activity_date` for the employee *before or on* the cutoff. Return a large number (e.g., 9999) if no activities before cutoff.
-    *   **Includes static employee attributes**: `employee_id`, `hire_date`, `department`, `salary`, `performance_rating`, `satisfaction_score`, `last_promotion_date`, and the actual `attrition_date` (for target creation).
-    *   **Ensures** all relevant employees are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no activity in the 90-day window. Handle `NULL`s appropriately.
+        *   `num_orders_prev_90d`: Count of distinct `order_item_id`s for the customer in the 90 days ending at `current_cutoff_date`.
+        *   `days_since_last_order_at_cutoff`: Number of days between `current_cutoff_date` and the most recent `order_date` for this `customer_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no orders before cutoff.
+        *   `num_purchases_electronics_prev_90d`: Count of `order_item_id`s for 'Electronics' category in the 90 days ending at `current_cutoff_date`.
+        *   `num_purchases_fashion_prev_90d`: Count of `order_item_id`s for 'Fashion' category in the 90 days ending at `current_cutoff_date`.
+        *   `num_purchases_homegoods_prev_90d`: Count of `order_item_id`s for 'Home Goods' category in the 90 days ending at `current_cutoff_date`.
+        *   `num_distinct_categories_prev_90d`: Count of distinct `category`s purchased by the customer in the 90 days ending at `current_cutoff_date`.
+    *   **Includes static customer attributes**: `customer_id`, `signup_date`, `region`, `loyalty_tier`.
+    *   **Ensures** all customers are included (using `LEFT JOIN`), showing 0 for counts if no activity in the 90-day window. Handle `NULL`s appropriately.
     *   The query should return all mentioned fields.
+    *   **Hint**: Use CTEs for pre-calculating customer-level historical aggregates up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Join `orders` with `products` to get category information. Use `julianday()` for date comparisons.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`employee_features_df`).
-    *   Convert all relevant date columns (`hire_date`, `current_cutoff_date`, `last_promotion_date`, `attrition_date`) to datetime objects.
-    *   Handle `NaN` values: Fill numerical aggregated features (`avg_hours_worked_prev_90d`, etc.) with 0 or 0.0 as appropriate. Fill `days_since_last_activity_at_cutoff` with 9999. For `last_promotion_date` (if NaT), `days_since_last_promotion_at_cutoff` will be a large number (e.g., tenure).
-    *   Calculate `employee_tenure_at_cutoff_days`: Number of days between `hire_date` and `current_cutoff_date`.
-    *   Calculate `days_since_last_promotion_at_cutoff`: Number of days between `last_promotion_date` and `current_cutoff_date`. If `last_promotion_date` is NaT or after cutoff, fill with `employee_tenure_at_cutoff_days` (or a large number).
-    *   **Create the Binary Target `will_attrit_in_next_6_months`**: For *each employee*, determine if their simulated `attrition_date` falls within the 6-month period *immediately following* their `current_cutoff_date` (exclusive of cutoff, inclusive of cutoff + 6 months). Merge this target (1 if yes, 0 if no) with `employee_features_df`, filling `NaN`s with 0 for employees who did not attrit or whose attrition date falls outside the window.
-    *   Define features `X` (numerical: `salary`, `performance_rating`, `satisfaction_score`, `avg_hours_worked_prev_90d`, `num_activities_prev_90d`, `num_distinct_projects_prev_90d`, `days_since_last_activity_at_cutoff`, `employee_tenure_at_cutoff_days`, `days_since_last_promotion_at_cutoff`; categorical: `department`) and target `y` (`will_attrit_in_next_6_months`).
+3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`customer_features_df`).
+    *   Convert `signup_date` and `current_cutoff_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical aggregated features with 0 or 0.0 as appropriate. Fill `days_since_last_order_at_cutoff` with 9999.
+    *   Calculate `customer_tenure_at_cutoff_days`: Number of days between `signup_date` and `current_cutoff_date`.
+    *   **Create the Multi-class Target `next_purchased_category`**: For *each customer*, identify the `category` of their *first product purchase* (i.e., the `product_id` with the earliest `order_date`) that occurs *after* `current_cutoff_date` and *on or before* `current_cutoff_date + pd.Timedelta(days=30)`. Map categories not explicitly listed in `num_purchases_...` features to 'Other' (e.g., 'Groceries', 'Toys', 'Sports' in `products_df`). If a customer makes no purchase in this window, they should be excluded from the dataset for training/testing. Merge this target with `customer_features_df`.
+    *   Define features `X` (numerical: `num_orders_prev_90d`, `days_since_last_order_at_cutoff`, `num_purchases_electronics_prev_90d`, `num_purchases_fashion_prev_90d`, `num_purchases_homegoods_prev_90d`, `num_distinct_categories_prev_90d`, `customer_tenure_at_cutoff_days`; categorical: `region`, `loyalty_tier`) and target `y` (`next_purchased_category`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_attrit_in_next_6_months`:
-    *   A violin plot (or box plot) showing the distribution of `satisfaction_score` for non-attriters (0) vs. attriters (1). Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `will_attrit_in_next_6_months` (0 or 1) across different `department` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `next_purchased_category`:
+    *   A violin plot (or box plot) showing the distribution of `num_orders_prev_90d` for each `next_purchased_category`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `next_purchased_category` across different `loyalty_tier` values. Ensure appropriate labels and titles.
 
-5.  **ML Pipeline & Evaluation (Binary Classification)**:
+5.  **ML Pipeline & Evaluation (Multi-class Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict the `next_purchased_category` on the test set (`X_test`).
+    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
+
+## Focus
+E-commerce, Customer Behavior, Multi-class Classification, Temporal Feature Engineering
+
+## Dataset
+['`customers_df` (customer demographics, loyalty)', '`products_df` (product attributes, category)', '`orders_df` (individual order items with date)']
 
 ## Hint
-When simulating `attrition_date`, ensure there's a good mix of employees who attrit and those who don't. For `days_since_last_promotion_at_cutoff`, if an employee has never been promoted or their last promotion was after the cutoff, the 'days since' should reflect their tenure up to the cutoff date. Pay close attention to the time windows for SQL aggregations and target definition to avoid data leakage. The `stratify` parameter in `train_test_split` is crucial for handling class imbalance.
+When generating synthetic data for `orders_df`, ensure to join `product_id` with `products_df` to derive category for each item. For SQL feature engineering, you'll need to join `orders` with `products` in your CTEs to filter by category. For the target creation in Pandas, carefully find the *first* order item within the future window for each customer and get its category. Remember to filter out customers who don't make a purchase in the target window before splitting data.
