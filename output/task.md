@@ -1,55 +1,51 @@
-# AI Daily Lab — 2026-06-03
+# AI Daily Lab — 2026-06-04
 
 ## Task
-Develop a machine learning pipeline to predict the **next product category** a customer will purchase ('Electronics', 'Fashion', 'Home Goods', 'Books', 'Other') within the next 30 days, based on their profile and historical purchase patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a ride-sharing trip will be **canceled** (binary classification), based on rider and driver profiles, trip details, and their historical cancellation behaviors up to a specific cutoff date.
 
-1.  **Synthetic Data Generation (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `customers_df`: With 1000-1500 rows. Columns: `customer_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `region` (e.g., 'North', 'South', 'East', 'West'), `loyalty_tier` (e.g., 'Bronze', 'Silver', 'Gold').
-    *   `products_df`: With 100-200 rows. Columns: `product_id` (unique integers), `product_name` (unique strings), `category` (e.g., 'Electronics', 'Fashion', 'Home Goods', 'Books', 'Groceries', 'Toys', 'Sports').
-    *   `orders_df`: With 20000-30000 rows. Columns: `order_item_id` (unique integers, representing individual items in an order), `customer_id` (randomly sampled from `customers_df` IDs), `product_id` (randomly sampled from `products_df` IDs), `order_date` (random datetimes occurring *after* their respective `signup_date` and up to `pd.Timestamp.now()`).
-    *   **Simulate realistic patterns**: Ensure `order_date` is always after `signup_date`. Simulate varying purchase habits: 'Gold' tier customers might have more frequent orders. Customers tend to show preferences for certain categories over time. A small percentage of customers might frequently switch categories. Ensure a good mix of categories purchased. Assign `product_id` to `orders_df` such that `category` can be derived. 
-    *   Sort `orders_df` by `customer_id` then `order_date`.
+## Focus
+Time-series feature engineering (SQL, Pandas) across multiple entities, binary classification, and handling class imbalance.
 
-2.  **Load into SQLite & SQL Feature Engineering (Historical Purchase Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `customers_df`, `products_df`, and `orders_df` into tables named `customers`, `products`, and `orders` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 30 days prior to the latest `order_date` in your generated `orders_df` (e.g., `orders_df['order_date'].max() - pd.Timedelta(days=30)`).
-    *   Write a single SQL query that performs the following for *each customer*, aggregating their purchase behavior *up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   `current_cutoff_date` (the `GLOBAL_PREDICTION_CUTOFF_DATE` itself, for consistency).
-        *   `num_orders_prev_90d`: Count of distinct `order_item_id`s for the customer in the 90 days ending at `current_cutoff_date`.
-        *   `days_since_last_order_at_cutoff`: Number of days between `current_cutoff_date` and the most recent `order_date` for this `customer_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no orders before cutoff.
-        *   `num_purchases_electronics_prev_90d`: Count of `order_item_id`s for 'Electronics' category in the 90 days ending at `current_cutoff_date`.
-        *   `num_purchases_fashion_prev_90d`: Count of `order_item_id`s for 'Fashion' category in the 90 days ending at `current_cutoff_date`.
-        *   `num_purchases_homegoods_prev_90d`: Count of `order_item_id`s for 'Home Goods' category in the 90 days ending at `current_cutoff_date`.
-        *   `num_distinct_categories_prev_90d`: Count of distinct `category`s purchased by the customer in the 90 days ending at `current_cutoff_date`.
-    *   **Includes static customer attributes**: `customer_id`, `signup_date`, `region`, `loyalty_tier`.
-    *   **Ensures** all customers are included (using `LEFT JOIN`), showing 0 for counts if no activity in the 90-day window. Handle `NULL`s appropriately.
-    *   The query should return all mentioned fields.
-    *   **Hint**: Use CTEs for pre-calculating customer-level historical aggregates up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Join `orders` with `products` to get category information. Use `julianday()` for date comparisons.
+## Dataset
+Generate three pandas DataFrames:
+    *   `riders_df`: With 1000-1500 rows. Columns: `rider_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `rider_avg_rating` (random floats 1.0-5.0), `total_trips_completed` (random integers 5-200).
+    *   `drivers_df`: With 500-700 rows. Columns: `driver_id` (unique integers), `onboard_date` (random dates over the last 3-5 years), `driver_avg_rating` (random floats 1.0-5.0), `total_trips_driven` (random integers 10-500).
+    *   `trips_df`: With 20000-30000 rows. Columns: `trip_id` (unique integers), `rider_id` (randomly sampled from `riders_df` IDs), `driver_id` (randomly sampled from `drivers_df` IDs), `request_timestamp` (random datetimes occurring *after* respective `signup_date` and `onboard_date`), `estimated_fare_usd` (random floats 5.0-100.0), `is_canceled` (binary: 0 or 1).
+    *   **Simulate realistic patterns**: Ensure `request_timestamp` is always after both `signup_date` and `onboard_date`. Introduce a small percentage (e.g., 5-10%) of `is_canceled=1`. Higher `estimated_fare_usd` might slightly increase cancellation risk. Riders/drivers with lower `avg_rating` or fewer `total_trips` might have higher cancellation rates. Peak hours (`hour_of_day`) could see slightly higher cancellations. Sort `trips_df` by `request_timestamp`.
 
-3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`customer_features_df`).
-    *   Convert `signup_date` and `current_cutoff_date` to datetime objects.
-    *   Handle `NaN` values: Fill numerical aggregated features with 0 or 0.0 as appropriate. Fill `days_since_last_order_at_cutoff` with 9999.
-    *   Calculate `customer_tenure_at_cutoff_days`: Number of days between `signup_date` and `current_cutoff_date`.
-    *   **Create the Multi-class Target `next_purchased_category`**: For *each customer*, identify the `category` of their *first product purchase* (i.e., the `product_id` with the earliest `order_date`) that occurs *after* `current_cutoff_date` and *on or before* `current_cutoff_date + pd.Timedelta(days=30)`. Map categories not explicitly listed in `num_purchases_...` features to 'Other' (e.g., 'Groceries', 'Toys', 'Sports' in `products_df`). If a customer makes no purchase in this window, they should be excluded from the dataset for training/testing. Merge this target with `customer_features_df`.
-    *   Define features `X` (numerical: `num_orders_prev_90d`, `days_since_last_order_at_cutoff`, `num_purchases_electronics_prev_90d`, `num_purchases_fashion_prev_90d`, `num_purchases_homegoods_prev_90d`, `num_distinct_categories_prev_90d`, `customer_tenure_at_cutoff_days`; categorical: `region`, `loyalty_tier`) and target `y` (`next_purchased_category`).
+2.  **Load into SQLite & SQL Feature Engineering (Historical Rider/Driver Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `riders_df`, `drivers_df`, and `trips_df` into tables named `riders`, `drivers`, and `trips` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `request_timestamp` in your generated `trips_df` (e.g., `trips_df['request_timestamp'].max() - pd.Timedelta(days=7)`).
+    *   Write a single SQL query that performs the following for *each trip that occurs AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+        *   Joins `trips` (filtered for events after cutoff) with `riders` and `drivers` tables.
+        *   Aggregates historical features *for the respective `rider_id` and `driver_id` up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+            *   `rider_cancel_rate_prev_30d`: Average `is_canceled` for this `rider_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+            *   `rider_num_trips_prev_30d`: Count of trips for this `rider_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+            *   `rider_days_since_last_trip_at_cutoff`: Days between `GLOBAL_PREDICTION_CUTOFF_DATE` and last trip for `rider_id` *before/on* cutoff (9999 if no prior trips).
+            *   `driver_cancel_rate_prev_30d`: Average `is_canceled` for this `driver_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+            *   `driver_num_trips_prev_30d`: Count of trips for this `driver_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
+            *   `driver_days_since_last_trip_at_cutoff`: Days between `GLOBAL_PREDICTION_CUTOFF_DATE` and last trip for `driver_id` *before/on* cutoff (9999 if no prior trips).
+        *   Extracts time-based features from the `request_timestamp` of the *current* trip (e.g., `hour_of_day`, `day_of_week`).
+        *   Includes static attributes: `trip_id`, `rider_id`, `driver_id`, `estimated_fare_usd`, `rider_avg_rating`, `driver_avg_rating`, and the target `is_canceled` for the current trip.
+    *   **Ensures** all trips *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for rates, 0 for counts if no prior activity).
+
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`trip_features_df`).
+    *   Convert `request_timestamp` to datetime objects.
+    *   Handle `NaN` values: Fill numerical historical aggregates (e.g., rates, counts) with 0.0 or 0 as appropriate. Fill `*_days_since_last_trip_at_cutoff` with 9999.
+    *   Calculate `rider_driver_rating_difference`: `rider_avg_rating` - `driver_avg_rating`.
+    *   Define features `X` (numerical: `estimated_fare_usd`, `rider_avg_rating`, `driver_avg_rating`, `rider_cancel_rate_prev_30d`, `rider_num_trips_prev_30d`, `rider_days_since_last_trip_at_cutoff`, `driver_cancel_rate_prev_30d`, `driver_num_trips_prev_30d`, `driver_days_since_last_trip_at_cutoff`, `hour_of_day`, `day_of_week`, `rider_driver_rating_difference`) and target `y` (`is_canceled`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `next_purchased_category`:
-    *   A violin plot (or box plot) showing the distribution of `num_orders_prev_90d` for each `next_purchased_category`. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `next_purchased_category` across different `loyalty_tier` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_canceled`:
+    *   A violin plot (or box plot) showing the distribution of `estimated_fare_usd` for non-canceled (0) vs. canceled (1) trips. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_canceled` (0 or 1) across different `day_of_week` values (e.g., Monday-Sunday). Ensure appropriate labels and titles.
 
-5.  **ML Pipeline & Evaluation (Multi-class Classification)**:
+5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict the `next_purchased_category` on the test set (`X_test`).
-    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
-
-## Focus
-E-commerce, Customer Behavior, Multi-class Classification, Temporal Feature Engineering
-
-## Dataset
-['`customers_df` (customer demographics, loyalty)', '`products_df` (product attributes, category)', '`orders_df` (individual order items with date)']
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to target imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-When generating synthetic data for `orders_df`, ensure to join `product_id` with `products_df` to derive category for each item. For SQL feature engineering, you'll need to join `orders` with `products` in your CTEs to filter by category. For the target creation in Pandas, carefully find the *first* order item within the future window for each customer and get its category. Remember to filter out customers who don't make a purchase in the target window before splitting data.
+For SQL feature engineering, you'll benefit from using multiple Common Table Expressions (CTEs). First, define CTEs for rider historical aggregates and driver historical aggregates up to the `GLOBAL_PREDICTION_CUTOFF_DATE`. Then, join these two CTEs with the main `trips` table (filtered for future trips) and the `riders`/`drivers` static data. Use `COALESCE` in your final SELECT statement to handle `NULL` values gracefully for the historical features if a rider/driver had no activity in the look-back window.
