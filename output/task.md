@@ -1,51 +1,48 @@
-# AI Daily Lab — 2026-06-04
+# AI Daily Lab — 2026-06-06
 
 ## Task
-Develop a machine learning pipeline to predict if a ride-sharing trip will be **canceled** (binary classification), based on rider and driver profiles, trip details, and their historical cancellation behaviors up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a loan applicant will **default** (binary classification), based on their application details and historical payment behavior up to the point of application.
 
 ## Focus
-Time-series feature engineering (SQL, Pandas) across multiple entities, binary classification, and handling class imbalance.
+Time-sensitive feature engineering using SQL on historical payment data relative to application date, binary classification for credit default prediction, and handling class imbalance.
 
 ## Dataset
-Generate three pandas DataFrames:
-    *   `riders_df`: With 1000-1500 rows. Columns: `rider_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `rider_avg_rating` (random floats 1.0-5.0), `total_trips_completed` (random integers 5-200).
-    *   `drivers_df`: With 500-700 rows. Columns: `driver_id` (unique integers), `onboard_date` (random dates over the last 3-5 years), `driver_avg_rating` (random floats 1.0-5.0), `total_trips_driven` (random integers 10-500).
-    *   `trips_df`: With 20000-30000 rows. Columns: `trip_id` (unique integers), `rider_id` (randomly sampled from `riders_df` IDs), `driver_id` (randomly sampled from `drivers_df` IDs), `request_timestamp` (random datetimes occurring *after* respective `signup_date` and `onboard_date`), `estimated_fare_usd` (random floats 5.0-100.0), `is_canceled` (binary: 0 or 1).
-    *   **Simulate realistic patterns**: Ensure `request_timestamp` is always after both `signup_date` and `onboard_date`. Introduce a small percentage (e.g., 5-10%) of `is_canceled=1`. Higher `estimated_fare_usd` might slightly increase cancellation risk. Riders/drivers with lower `avg_rating` or fewer `total_trips` might have higher cancellation rates. Peak hours (`hour_of_day`) could see slightly higher cancellations. Sort `trips_df` by `request_timestamp`.
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create two pandas DataFrames:
+    *   `loan_applicants_df`: With 1000-1500 rows. Columns: `applicant_id` (unique integers), `age` (random integers 18-70), `income` (random floats 20000-200000), `education` (e.g., 'High School', 'Bachelors', 'Masters', 'PhD'), `loan_amount_requested` (random floats 5000-100000), `loan_term_months` (random integers 12-60), `credit_score_at_application` (random integers 300-850), `application_date` (random dates over the last 3 years), `_actual_default_status` (binary: 0 or 1).
+    *   `payment_history_df`: With 20000-30000 rows. Columns: `payment_id` (unique integers), `applicant_id` (randomly sampled from `loan_applicants_df` IDs), `payment_date` (random datetimes, ensuring they are *before* the corresponding `application_date` for an applicant and cover a historical period for each applicant), `amount_paid` (random floats 100-2000), `is_late_payment` (binary: 0 or 1).
+    *   **Simulate realistic patterns**: Introduce a small percentage (e.g., 10-15%) of `_actual_default_status=1`. Defaulting applicants should tend to have: lower `income`, lower `credit_score_at_application`, higher `loan_amount_requested`, and more `is_late_payment=1` events in their historical `payment_history_df` *prior to their application*. Ensure `payment_date` is always strictly earlier than `application_date` for feature engineering purposes. Sort `payment_history_df` by `applicant_id` then `payment_date`.
 
-2.  **Load into SQLite & SQL Feature Engineering (Historical Rider/Driver Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `riders_df`, `drivers_df`, and `trips_df` into tables named `riders`, `drivers`, and `trips` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `request_timestamp` in your generated `trips_df` (e.g., `trips_df['request_timestamp'].max() - pd.Timedelta(days=7)`).
-    *   Write a single SQL query that performs the following for *each trip that occurs AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Joins `trips` (filtered for events after cutoff) with `riders` and `drivers` tables.
-        *   Aggregates historical features *for the respective `rider_id` and `driver_id` up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `rider_cancel_rate_prev_30d`: Average `is_canceled` for this `rider_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `rider_num_trips_prev_30d`: Count of trips for this `rider_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `rider_days_since_last_trip_at_cutoff`: Days between `GLOBAL_PREDICTION_CUTOFF_DATE` and last trip for `rider_id` *before/on* cutoff (9999 if no prior trips).
-            *   `driver_cancel_rate_prev_30d`: Average `is_canceled` for this `driver_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `driver_num_trips_prev_30d`: Count of trips for this `driver_id` in the 30 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `driver_days_since_last_trip_at_cutoff`: Days between `GLOBAL_PREDICTION_CUTOFF_DATE` and last trip for `driver_id` *before/on* cutoff (9999 if no prior trips).
-        *   Extracts time-based features from the `request_timestamp` of the *current* trip (e.g., `hour_of_day`, `day_of_week`).
-        *   Includes static attributes: `trip_id`, `rider_id`, `driver_id`, `estimated_fare_usd`, `rider_avg_rating`, `driver_avg_rating`, and the target `is_canceled` for the current trip.
-    *   **Ensures** all trips *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for rates, 0 for counts if no prior activity).
+2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations at Application)**: Create an in-memory SQLite database using `sqlite3`. Load `loan_applicants_df` and `payment_history_df` into tables named `applicants` and `payments` respectively.
+    *   Write a single SQL query that performs the following for *each loan applicant* in the `applicants` table:
+        *   Includes static applicant attributes: `applicant_id`, `age`, `income`, `education`, `loan_amount_requested`, `loan_term_months`, `credit_score_at_application`, `application_date`, `_actual_default_status`.
+        *   Aggregates historical features *for the respective `applicant_id` from the `payments` table where `payment_date` is strictly BEFORE the current `application_date` for that loan application*:
+            *   `num_late_payments_prev_12m_at_app`: Count of `is_late_payment=1` for the applicant in the 12 months *prior to* their `application_date`.
+            *   `avg_payment_amount_prev_12m_at_app`: Average `amount_paid` for the applicant in the 12 months *prior to* their `application_date`.
+            *   `num_payments_prev_12m_at_app`: Count of payments for the applicant in the 12 months *prior to* their `application_date`.
+            *   `days_since_last_payment_at_app`: Number of days between the applicant's `application_date` and their most recent `payment_date` *before* the `application_date`. Return 9999 if no prior payments.
+        *   Extracts time-based features from the `application_date` of the *current* loan: `day_of_week_application` (0-6), `month_of_application` (1-12).
+    *   **Ensures** all applicants are included (using `LEFT JOIN`). Handle `NULL`s for aggregated historical features (e.g., 0.0 for averages, 0 for counts, 9999 for days since last payment).
+    *   The query should return all mentioned fields.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`trip_features_df`).
-    *   Convert `request_timestamp` to datetime objects.
-    *   Handle `NaN` values: Fill numerical historical aggregates (e.g., rates, counts) with 0.0 or 0 as appropriate. Fill `*_days_since_last_trip_at_cutoff` with 9999.
-    *   Calculate `rider_driver_rating_difference`: `rider_avg_rating` - `driver_avg_rating`.
-    *   Define features `X` (numerical: `estimated_fare_usd`, `rider_avg_rating`, `driver_avg_rating`, `rider_cancel_rate_prev_30d`, `rider_num_trips_prev_30d`, `rider_days_since_last_trip_at_cutoff`, `driver_cancel_rate_prev_30d`, `driver_num_trips_prev_30d`, `driver_days_since_last_trip_at_cutoff`, `hour_of_day`, `day_of_week`, `rider_driver_rating_difference`) and target `y` (`is_canceled`).
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`loan_features_df`).
+    *   Convert `application_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical historical aggregated features with 0.0 or 0 as appropriate. Fill `days_since_last_payment_at_app` with 9999. Fill `income` and `credit_score_at_application` NaNs with their respective means.
+    *   Calculate `debt_to_income_ratio`: `loan_amount_requested` / (`income` + 1e-6). Fill any `NaN` or `inf` with 0.
+    *   **Create the Binary Target `is_default`**: Directly use the `_actual_default_status` column.
+    *   Define features `X` (numerical: `age`, `income`, `loan_amount_requested`, `loan_term_months`, `credit_score_at_application`, `num_late_payments_prev_12m_at_app`, `avg_payment_amount_prev_12m_at_app`, `num_payments_prev_12m_at_app`, `days_since_last_payment_at_app`, `day_of_week_application`, `month_of_application`, `debt_to_income_ratio`; categorical: `education`) and target `y` (`is_default`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_canceled`:
-    *   A violin plot (or box plot) showing the distribution of `estimated_fare_usd` for non-canceled (0) vs. canceled (1) trips. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_canceled` (0 or 1) across different `day_of_week` values (e.g., Monday-Sunday). Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_default`:
+    *   A violin plot (or box plot) showing the distribution of `credit_score_at_application` for non-defaulters (0) vs. defaulters (1). Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_default` (0 or 1) across different `education` values. Ensure appropriate labels and titles.
 
 5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to target imbalance).
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and set `class_weight='balanced'` due to target imbalance).
     *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Hint
-For SQL feature engineering, you'll benefit from using multiple Common Table Expressions (CTEs). First, define CTEs for rider historical aggregates and driver historical aggregates up to the `GLOBAL_PREDICTION_CUTOFF_DATE`. Then, join these two CTEs with the main `trips` table (filtered for future trips) and the `riders`/`drivers` static data. Use `COALESCE` in your final SELECT statement to handle `NULL` values gracefully for the historical features if a rider/driver had no activity in the look-back window.
+For the SQL feature engineering, you'll need to use a correlated subquery within a `LEFT JOIN` or carefully structured CTEs. One effective way is to use `LEFT JOIN` with `payments` table and then filter payments by `payments.payment_date < applicants.application_date` and `payments.payment_date >= DATE(applicants.application_date, '-12 months')`. Remember `GROUP BY applicants.applicant_id` and use `COALESCE` for aggregated features to handle applicants with no prior payment history. `julianday()` is useful for date comparisons and arithmetic in SQLite.
