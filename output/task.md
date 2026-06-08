@@ -1,55 +1,13 @@
-# AI Daily Lab — 2026-06-07
+# AI Daily Lab — 2026-06-08
 
 ## Task
-Develop a machine learning pipeline to predict if a user will **click on an advertisement** (binary classification) for a given ad impression, based on user profile, ad attributes, and their historical interaction patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict if an individual e-commerce order item will be **returned** (binary classification), based on product attributes, customer profile, and historical return patterns up to the order date.
 
 ## Focus
-Predicting Ad Click-Through Rate (CTR) using historical user and ad performance metrics.
+SQL time-windowed aggregations, binary classification with imbalanced data, end-to-end ML pipeline, feature engineering from multi-table synthetic data.
 
 ## Dataset
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `age_group` (e.g., '18-24', '25-44', '45+'), `region` (e.g., 'North', 'South', 'East', 'West'), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet').
-    *   `ads_df`: With 100-200 rows. Columns: `ad_id` (unique integers), `campaign_id` (random integers), `ad_type` (e.g., 'Banner', 'Video', 'Native', 'Text'), `creative_size` (e.g., 'Small', 'Medium', 'Large'), `target_gender` (e.g., 'Male', 'Female', 'All').
-    *   `impressions_df`: With 20000-30000 rows. Columns: `impression_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `ad_id` (randomly sampled from `ads_df` IDs), `impression_timestamp` (random datetimes occurring *after* respective `signup_date` and up to `pd.Timestamp.now()`), `clicked` (binary: 0 or 1, the target variable).
-    *   **Simulate realistic patterns**: Ensure `impression_timestamp` is always after `signup_date`. Introduce a small percentage (e.g., 1-5%) of `clicked=1`. Simulate varying CTRs: 'Video' ads might have higher `clicked` rates. 'Mobile' users might click more. Specific `age_group`s or `region`s might respond differently. 'Large' `creative_size` might increase CTR. `target_gender` should ideally align with user gender for higher CTR. Some ads/campaigns should perform better than others. Sort `impressions_df` by `user_id` then `impression_timestamp`.
-
-2.  **Load into SQLite & SQL Feature Engineering (Historical Interaction Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `ads_df`, and `impressions_df` into tables named `users`, `ads`, and `impressions` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 14 days prior to the latest `impression_timestamp` in your generated `impressions_df` (e.g., `impressions_df['impression_timestamp'].max() - pd.Timedelta(days=14)`).
-    *   Write a single SQL query that performs the following for *each impression that occurred AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Joins the `impressions` (filtered for events after cutoff) with the `users` and `ads` tables.
-        *   Aggregates historical features *for the respective `user_id` up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `user_total_clicks_prev_7d`: Count of `clicked=1` for this `user_id` in the 7 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `user_total_impressions_prev_7d`: Count of all impressions for this `user_id` in the 7 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `days_since_last_click_user_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `impression_timestamp` where `clicked=1` for this `user_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior clicks.
-        *   Aggregates historical features *for the respective `ad_id` up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `ad_total_clicks_prev_7d`: Count of `clicked=1` for this `ad_id` in the 7 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `ad_total_impressions_prev_7d`: Count of all impressions for this `ad_id` in the 7 days *prior to or on* `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `ad_days_since_first_impression_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the *earliest* `impression_timestamp` for this `ad_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior impressions.
-        *   Extracts time-based features from the `impression_timestamp` of the *current* impression (e.g., `hour_of_day`, `day_of_week`, `month_of_year`).
-        *   Includes static attributes: `impression_id`, `user_id`, `ad_id`, `ad_type`, `creative_size`, `target_gender`, `age_group`, `region`, `device_type`, and the target `clicked` for the *current* impression.
-    *   **Ensures** all impressions *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity).
-    *   The query should return all mentioned fields.
-    *   **Hint**: Use CTEs for pre-calculating user-level and ad-level historical aggregates up to the `GLOBAL_PREDICTION_CUTOFF_DATE`, then join these with the future impressions.
-
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`ad_features_df`).
-    *   Convert `signup_date` and `impression_timestamp` to datetime objects.
-    *   Handle `NaN` values: Fill numerical historical aggregates (e.g., counts) with 0. Fill `days_since_last_click_user_at_cutoff` and `ad_days_since_first_impression_at_cutoff` with 9999.
-    *   Calculate `user_ctr_prev_7d`: `user_total_clicks_prev_7d` / (`user_total_impressions_prev_7d` + 1e-6). Fill any `NaN` or `inf` with 0.
-    *   Calculate `ad_ctr_prev_7d`: `ad_total_clicks_prev_7d` / (`ad_total_impressions_prev_7d` + 1e-6). Fill any `NaN` or `inf` with 0.
-    *   Define features `X` (numerical: `user_total_clicks_prev_7d`, `user_total_impressions_prev_7d`, `days_since_last_click_user_at_cutoff`, `ad_total_clicks_prev_7d`, `ad_total_impressions_prev_7d`, `ad_days_since_first_impression_at_cutoff`, `user_ctr_prev_7d`, `ad_ctr_prev_7d`, `hour_of_day`, `day_of_week`, `month_of_year`; categorical: `age_group`, `region`, `device_type`, `ad_type`, `creative_size`, `target_gender`) and target `y` (`clicked`).
-    *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` to handle class imbalance).
-
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `clicked`:
-    *   A violin plot (or box plot) showing the distribution of `user_ctr_prev_7d` for non-clicks (0) vs. clicks (1). Consider a log transformation if highly skewed. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `clicked` (0 or 1) across different `ad_type` values. Ensure appropriate labels and titles for both plots.
-
-5.  **ML Pipeline & Evaluation (Binary Classification)**:
-    *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
-        *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
-        *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+Synthetic e-commerce data: customers, products, and order items with return status.
 
 ## Hint
-When performing SQL aggregations for historical features (e.g., `user_total_clicks_prev_7d`), ensure your `WHERE` clause correctly filters `impression_timestamp` to be *before or on* the `GLOBAL_PREDICTION_CUTOFF_DATE` and within the specified time window (e.g., 7 days prior). Use `julianday()` for robust date arithmetic in SQLite. Remember to `COALESCE` aggregated results to 0 or appropriate default values when using `LEFT JOIN`s to ensure all rows are included even if no historical activity.
+When generating `orders_df`, simulate a slightly higher return rate for certain product categories, lower-tier loyalty customers, or higher-priced items. For the SQL aggregations, remember to filter historical data in CTEs strictly *before or on* the `GLOBAL_PREDICTION_CUTOFF_DATE` and ensure `is_returned` is treated as a numerical value (0 or 1) for averages. Use `CAST(SUM(CASE WHEN is_returned = 1 THEN 1 ELSE 0 END) AS REAL) / (COUNT(*) + 1e-6)` for calculating return rates to handle potential zero denominators.
