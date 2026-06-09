@@ -1,13 +1,13 @@
-# AI Daily Lab — 2026-06-08
+# AI Daily Lab — 2026-06-09
 
 ## Task
-Develop a machine learning pipeline to predict if an individual e-commerce order item will be **returned** (binary classification), based on product attributes, customer profile, and historical return patterns up to the order date.
+Develop a machine learning pipeline to predict the **Customer Lifetime Value (LTV) category** ('Low', 'Medium', 'High') for the next 6 months, based on their profile and historical purchase behavior up to a specific cutoff date.
 
 ## Focus
-SQL time-windowed aggregations, binary classification with imbalanced data, end-to-end ML pipeline, feature engineering from multi-table synthetic data.
+Predicting future customer value (multi-class classification) using time-windowed SQL aggregations and standard ML practices.
 
 ## Dataset
-Synthetic e-commerce data: customers, products, and order items with return status.
+Synthetic e-commerce customer and order data.
 
 ## Hint
-When generating `orders_df`, simulate a slightly higher return rate for certain product categories, lower-tier loyalty customers, or higher-priced items. For the SQL aggregations, remember to filter historical data in CTEs strictly *before or on* the `GLOBAL_PREDICTION_CUTOFF_DATE` and ensure `is_returned` is treated as a numerical value (0 or 1) for averages. Use `CAST(SUM(CASE WHEN is_returned = 1 THEN 1 ELSE 0 END) AS REAL) / (COUNT(*) + 1e-6)` for calculating return rates to handle potential zero denominators.
+When generating synthetic data for LTV, ensure that some customer segments or channels naturally lead to higher total spend and more frequent orders. The `GLOBAL_PREDICTION_CUTOFF_DATE` should be chosen such that there is sufficient historical data for feature engineering and sufficient *future* data in your `orders_df` to accurately calculate the 6-month LTV target for most customers. Use percentiles (e.g., 33rd, 67th) on the calculated LTV values to define 'Low', 'Medium', 'High' categories, aiming for a relatively balanced distribution.
