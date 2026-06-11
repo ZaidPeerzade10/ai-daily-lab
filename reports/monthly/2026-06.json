@@ -6,5 +6,6 @@
   "2026-06-06": "Develop a machine learning pipeline to predict if a loan applicant will **default** (binary classification), based on their application details and historical payment behavior up to the point of application.",
   "2026-06-07": "Develop a machine learning pipeline to predict if a user will **click on an advertisement** (binary classification) for a given ad impression, based on user profile, ad attributes, and their historical interaction patterns up to a specific cutoff date.",
   "2026-06-08": "Develop a machine learning pipeline to predict if an individual e-commerce order item will be **returned** (binary classification), based on product attributes, customer profile, and historical return patterns up to the order date.",
-  "2026-06-09": "Develop a machine learning pipeline to predict the **Customer Lifetime Value (LTV) category** ('Low', 'Medium', 'High') for the next 6 months, based on their profile and historical purchase behavior up to a specific cutoff date."
+  "2026-06-09": "Develop a machine learning pipeline to predict the **Customer Lifetime Value (LTV) category** ('Low', 'Medium', 'High') for the next 6 months, based on their profile and historical purchase behavior up to a specific cutoff date.",
+  "2026-06-11": "Develop a machine learning pipeline to predict if a credit card transaction will be **fraudulent** (binary classification), based on transaction details, customer profile, merchant information, and historical transaction patterns up to a specific cutoff date."
 }

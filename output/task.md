@@ -1,13 +1,13 @@
-# AI Daily Lab — 2026-06-09
+# AI Daily Lab — 2026-06-11
 
 ## Task
-Develop a machine learning pipeline to predict the **Customer Lifetime Value (LTV) category** ('Low', 'Medium', 'High') for the next 6 months, based on their profile and historical purchase behavior up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a credit card transaction will be **fraudulent** (binary classification), based on transaction details, customer profile, merchant information, and historical transaction patterns up to a specific cutoff date.
 
 ## Focus
-Predicting future customer value (multi-class classification) using time-windowed SQL aggregations and standard ML practices.
+Binary classification, time-series feature engineering, handling highly imbalanced data, SQL analytics, data visualization.
 
 ## Dataset
-Synthetic e-commerce customer and order data.
+Synthetic credit card transactions, customer profiles, and merchant details.
 
 ## Hint
-When generating synthetic data for LTV, ensure that some customer segments or channels naturally lead to higher total spend and more frequent orders. The `GLOBAL_PREDICTION_CUTOFF_DATE` should be chosen such that there is sufficient historical data for feature engineering and sufficient *future* data in your `orders_df` to accurately calculate the 6-month LTV target for most customers. Use percentiles (e.g., 33rd, 67th) on the calculated LTV values to define 'Low', 'Medium', 'High' categories, aiming for a relatively balanced distribution.
+Pay close attention to generating a realistic, highly imbalanced target variable for 'is_fraud' (e.g., 1-3% fraud). For SQL, ensure historical aggregates are calculated *up to and including* a `GLOBAL_PREDICTION_CUTOFF_DATE`, and the target transactions are those occurring *after* this cutoff. Use `class_weight='balanced'` in your ML model and `roc_auc_score` for evaluation due to the imbalance.
