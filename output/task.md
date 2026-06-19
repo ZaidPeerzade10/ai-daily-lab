@@ -1,13 +1,13 @@
-# AI Daily Lab — 2026-06-16
+# AI Daily Lab — 2026-06-19
 
 ## Task
-Develop a machine learning pipeline to predict the **traffic congestion level** ('Low', 'Medium', 'High') for a road segment at a specific timestamp, based on static road attributes, real-time sensor readings, and recent historical traffic patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict the **daily booking demand category** ('Low', 'Medium', 'High') for a restaurant for the next 7 days, based on its static attributes, recent booking history, and overall market demand up to a specific cutoff date.
 
 ## Focus
-Time-series feature engineering (aggregations within historical windows), multi-class classification, and data leakage prevention in a real-world context (traffic prediction).
+Pandas/Numpy for data generation and advanced feature engineering, SQLite for time-windowed SQL aggregations, Matplotlib/Seaborn for data visualization, and Scikit-learn for ML pipeline development and multi-class classification evaluation.
 
 ## Dataset
-Simulated data including `road_segments_df` (segment ID, length, lanes, speed limit, type), `traffic_sensors_df` (sensor ID, segment ID), and `traffic_readings_df` (sensor ID, timestamp, vehicle count, observed speed, actual congestion index).
+Synthetic data involving `restaurants_df` (static attributes like cuisine, location, capacity, rating) and `daily_bookings_df` (daily total guests booked for each restaurant over time).
 
 ## Hint
-Pay close attention to time-based filtering in SQL for feature engineering. Ensure historical aggregates are calculated *only* from data preceding the prediction point, and the target is from the future. Use `julianday()` for date comparisons and `CASE` statements or `COALESCE` for handling missing aggregates in SQL. For the target, percentile-based binning is key to creating a balanced multi-class distribution.
+Pay close attention to defining `GLOBAL_PREDICTION_CUTOFF_DATE` and ensuring that all features are derived from data strictly *before or on* this cutoff, while the target is derived from data *after* it. For SQL aggregations, use `julianday()` for robust date arithmetic and `CASE` statements within `SUM`/`AVG`/`COUNT` for conditional aggregation (e.g., for weekend averages or capacity thresholds). Ensure proper `LEFT JOIN`s to retain all restaurants, even those with no recent activity.
