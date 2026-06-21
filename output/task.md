@@ -1,51 +1,54 @@
-# AI Daily Lab — 2026-06-20
+# AI Daily Lab — 2026-06-21
 
 ## Task
-Develop a machine learning pipeline to predict if a patient will **no-show** for their scheduled appointment (binary classification), based on their demographic profile, appointment details, and historical attendance patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict the **overall product rating category** ('Low', 'Medium', 'High') for a product, based on its static attributes and historical customer review patterns up to a specific cutoff date.
 
 ## Focus
-Predicting patient no-show rates for healthcare appointment optimization.
+Time-windowed SQL feature engineering, multi-class classification, and data visualization for product sentiment prediction.
 
 ## Dataset
-1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `patients_df`: With 1000-1500 rows. Columns: `patient_id` (unique integers), `age` (random integers 18-90), `gender` (e.g., 'Male', 'Female', 'Other'), `existing_condition` (e.g., 'None', 'Chronic', 'Acute'), `signup_date` (random dates over the last 5-10 years).
-    *   `doctors_df`: With 50-100 rows. Columns: `doctor_id` (unique integers), `specialty` (e.g., 'Cardiology', 'Pediatrics', 'Dermatology', 'General', 'Orthopedics'), `doctor_experience_years` (random integers 3-30), `doctor_rating` (random floats 3.0-5.0).
-    *   `appointments_df`: With 30000-50000 rows. Columns: `appointment_id` (unique integers), `patient_id` (randomly sampled from `patients_df` IDs), `doctor_id` (randomly sampled from `doctors_df` IDs), `appointment_datetime` (random datetimes, *after* respective `signup_date` for the `patient_id`, up to `pd.Timestamp.now()`), `_attended` (binary: 1 for attended, 0 for no-show - simulate ~15-25% no-shows, with higher rates for patients with past no-shows, lower `doctor_rating`, or certain `existing_condition`).
-    *   **Simulate realistic patterns**: Ensure `appointment_datetime` is after `signup_date`. Patients with `Chronic` conditions might have more appointments. Doctors with higher `doctor_rating` might have fewer no-shows. Patients who have no-showed in the past are more likely to no-show again. Ensure a good mix of specialties and patient conditions. Sort `appointments_df` by `patient_id` then `appointment_datetime`.
+Synthetic E-commerce Product & Review Data
 
-2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `patients_df`, `doctors_df`, and `appointments_df` into tables named `patients`, `doctors`, and `appointments` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `appointment_datetime` in your generated `appointments_df`.
-    *   Write a single SQL query that performs the following for *each appointment scheduled AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Joins `appointments` (filtered for events after cutoff) with `patients` and `doctors` tables.
-        *   Aggregates historical features based on *appointments up to and including `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `num_past_appointments_patient_prev_90d`: Count of appointments for the specific `patient_id` in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-            *   `patient_no_show_rate_prev_90d`: Average of `(1 - _attended)` for the `patient_id` in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE` (i.e., proportion of no-shows).
-            *   `days_since_last_appointment_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `appointment_datetime` for this `patient_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior appointments.
-            *   `doctor_avg_no_show_rate_prev_90d`: Average of `(1 - _attended)` for the specific `doctor_id` in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`.
-        *   Extracts time-based features from the `appointment_datetime` of the *current* future appointment: `appointment_day_of_week` (0-6), `appointment_hour_of_day` (0-23).
-        *   Includes static attributes: `appointment_id`, `patient_id`, `age`, `gender`, `existing_condition`, `doctor_id`, `specialty`, `doctor_experience_years`, `doctor_rating`, and the target `_attended` for the *current* future appointment.
-    *   **Ensures** all appointments *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity, 9999 for days since last activity).
+## Hint
+1.  **Synthetic Data Generation (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `products_df`: With 500-1000 rows. Columns: `product_id` (unique integers), `product_name` (unique strings), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'Home'), `price` (random floats 10.0-1000.0), `launch_date` (random dates over the last 3-5 years).
+    *   `customers_df`: With 1000-1500 rows. Columns: `customer_id` (unique integers), `signup_date`.
+    *   `reviews_df`: With 20000-30000 rows. Columns: `review_id` (unique integers), `product_id` (sampled from `products_df`), `customer_id` (sampled from `customers_df`), `review_date` (random datetimes *after* `launch_date` for respective product), `rating` (integers 1-5).
+    *   **Simulate realistic patterns**: Ensure `review_date` is always after `product_launch_date`. Simulate a distribution of ratings (e.g., more 4-5 stars than 1-2 stars, but ensure all exist). Higher priced items might have more reviews or more polarized reviews. Products launched longer ago tend to have more reviews. Sort `reviews_df` by `product_id` then `review_date`.
+
+2.  **Load into SQLite & SQL Feature Engineering (Historical Review Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df`, `customers_df`, and `reviews_df` into tables named `products`, `customers`, and `reviews` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 45 days prior to the latest `review_date` in your generated `reviews_df`.
+    *   Write a single SQL query that performs the following for *each product* active up to `GLOBAL_PREDICTION_CUTOFF_DATE`:
+        *   `product_id`, `category`, `price`, `launch_date`.
+        *   `avg_rating_prev_90d`: Average `rating` for the product in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`. (Use `COALESCE(AVG(r.rating), 0.0)` for NULLs).
+        *   `num_reviews_prev_90d`: Count of reviews for the product in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`. (Use `COALESCE(COUNT(r.review_id), 0)`).
+        *   `days_since_last_review_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `review_date` for this `product_id` *before or on* the cutoff. Return 9999 if no reviews before cutoff.
+        *   `total_reviews_since_launch`: Total count of reviews for the product from `launch_date` up to `GLOBAL_PREDICTION_CUTOFF_DATE`.
+        *   Include `GLOBAL_PREDICTION_CUTOFF_DATE` as a column for consistency.
+    *   **Ensures** all products are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no activity in the window. Handle `NULL`s appropriately.
     *   The query should return all mentioned fields.
+    *   **Hint**: Use CTEs for pre-calculating product-level historical aggregates up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Use `julianday()` for date comparisons.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`appointment_features_df`).
-    *   Convert `appointment_datetime` and `signup_date` (from original `patients_df` if needed for tenure) to datetime objects. You'll also need the `GLOBAL_PREDICTION_CUTOFF_DATE` in pandas for tenure calculation.
-    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., rates, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_appointment_at_cutoff` with 9999. Fill `age`, `doctor_experience_years`, `doctor_rating` with their respective means.
-    *   Calculate `patient_tenure_at_cutoff_days`: Number of days between `signup_date` and `GLOBAL_PREDICTION_CUTOFF_DATE`.
-    *   **Create the Binary Target `will_no_show`**: Based on the `_attended` column for the *current* appointment: `1` if `_attended` is 0 (no-show), `0` if `_attended` is 1 (attended).
-    *   Define features `X` (numerical: `age`, `doctor_experience_years`, `doctor_rating`, `num_past_appointments_patient_prev_90d`, `patient_no_show_rate_prev_90d`, `days_since_last_appointment_at_cutoff`, `doctor_avg_no_show_rate_prev_90d`, `appointment_day_of_week`, `appointment_hour_of_day`, `patient_tenure_at_cutoff_days`; categorical: `gender`, `existing_condition`, `specialty`) and target `y` (`will_no_show`).
+3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
+    *   Convert `launch_date` and `GLOBAL_PREDICTION_CUTOFF_DATE` to datetime objects.
+    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., averages, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_review_at_cutoff` with 9999.
+    *   Calculate `product_age_at_cutoff_days`: Number of days between `launch_date` and `GLOBAL_PREDICTION_CUTOFF_DATE`.
+    *   **Create the Multi-class Target `next_30d_rating_category`**: For *each product*, calculate the average `rating` of *all reviews* from the original `reviews_df` that occur *after* `GLOBAL_PREDICTION_CUTOFF_DATE` and *on or before* `GLOBAL_PREDICTION_CUTOFF_DATE + pd.Timedelta(days=30)`. Map this average rating into categories:
+        *   'Low': average_rating <= 33rd percentile of *all* such next-30-day average ratings.
+        *   'Medium': average_rating > 33rd percentile and <= 66th percentile.
+        *   'High': average_rating > 66th percentile.
+        *   If a product has no reviews in this 30-day future window, exclude it from the dataset for training/testing. Merge this target with `product_features_df`.
+    *   Define features `X` (numerical: `price`, `avg_rating_prev_90d`, `num_reviews_prev_90d`, `days_since_last_review_at_cutoff`, `total_reviews_since_launch`, `product_age_at_cutoff_days`; categorical: `category`) and target `y` (`next_30d_rating_category`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_no_show`:
-    *   A violin plot (or box plot) showing the distribution of `days_since_last_appointment_at_cutoff` for 'Attended' (0) vs. 'No-Show' (1) appointments. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `will_no_show` (0 or 1) across different `specialty` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `next_30d_rating_category`:
+    *   A violin plot (or box plot) showing the distribution of `price` for each `next_30d_rating_category`. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `next_30d_rating_category` across different `category` values. Ensure appropriate labels and titles.
 
-5.  **ML Pipeline & Evaluation (Binary Classification)**:
+5.  **ML Pipeline & Evaluation (Multi-class Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
-    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
-    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
-
-## Hint
-When simulating `_attended` in `appointments_df`, make no-show probability higher if the patient has a 'Chronic' condition, a lower `doctor_rating`, or has a history of no-shows (e.g., using a cumulative count of past no-shows). For SQL date comparisons, use `julianday()` and `CAST` date strings carefully. Remember to handle potential division by zero when calculating rates (e.g., using `CASE WHEN COUNT(...) > 0 THEN AVG(...) ELSE 0 END`).
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
+    *   Train the pipeline on `X_train`, `y_train`. Predict the `next_30d_rating_category` on the test set (`X_test`).
+    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
