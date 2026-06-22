@@ -1,54 +1,51 @@
-# AI Daily Lab — 2026-06-21
+# AI Daily Lab — 2026-06-22
 
 ## Task
-Develop a machine learning pipeline to predict the **overall product rating category** ('Low', 'Medium', 'High') for a product, based on its static attributes and historical customer review patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a website user session will be a **bounce** (binary classification), based on user profile, session details (excluding bounce-defining metrics), and historical user activity up to a specific cutoff date.
 
-## Focus
-Time-windowed SQL feature engineering, multi-class classification, and data visualization for product sentiment prediction.
-
-## Dataset
-Synthetic E-commerce Product & Review Data
-
-## Hint
 1.  **Synthetic Data Generation (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `products_df`: With 500-1000 rows. Columns: `product_id` (unique integers), `product_name` (unique strings), `category` (e.g., 'Electronics', 'Books', 'Clothing', 'Home'), `price` (random floats 10.0-1000.0), `launch_date` (random dates over the last 3-5 years).
-    *   `customers_df`: With 1000-1500 rows. Columns: `customer_id` (unique integers), `signup_date`.
-    *   `reviews_df`: With 20000-30000 rows. Columns: `review_id` (unique integers), `product_id` (sampled from `products_df`), `customer_id` (sampled from `customers_df`), `review_date` (random datetimes *after* `launch_date` for respective product), `rating` (integers 1-5).
-    *   **Simulate realistic patterns**: Ensure `review_date` is always after `product_launch_date`. Simulate a distribution of ratings (e.g., more 4-5 stars than 1-2 stars, but ensure all exist). Higher priced items might have more reviews or more polarized reviews. Products launched longer ago tend to have more reviews. Sort `reviews_df` by `product_id` then `review_date`.
+    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet'), `browser` (e.g., 'Chrome', 'Firefox', 'Safari').
+    *   `pages_df`: With 50-100 rows. Columns: `page_id` (unique integers), `page_name` (unique strings, e.g., 'Homepage', 'ProductX', 'CategoryY', 'ContactUs'), `page_type` (e.g., 'Landing', 'Product', 'Informational').
+    *   `sessions_df`: With 20000-30000 rows. Columns: `session_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `start_datetime` (random datetimes occurring *after* their respective `signup_date` and up to `pd.Timestamp.now()`), `landing_page_id` (randomly sampled from `pages_df` IDs), `session_duration_seconds` (random floats 1.0-1200.0), `had_conversion` (binary: 1 for ~10-15% of sessions, 0 otherwise).
+    *   **Simulate realistic patterns**: Ensure `start_datetime` is always after `signup_date`. Longer `session_duration_seconds` should correlate with `had_conversion=1`. `device_type` and `browser` should influence session behavior. Some `landing_page_id`s might be stickier or more prone to bounces. Simulate a general trend of users becoming more engaged over time. Sort `sessions_df` by `user_id` then `start_datetime`.
 
-2.  **Load into SQLite & SQL Feature Engineering (Historical Review Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `products_df`, `customers_df`, and `reviews_df` into tables named `products`, `customers`, and `reviews` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 45 days prior to the latest `review_date` in your generated `reviews_df`.
-    *   Write a single SQL query that performs the following for *each product* active up to `GLOBAL_PREDICTION_CUTOFF_DATE`:
-        *   `product_id`, `category`, `price`, `launch_date`.
-        *   `avg_rating_prev_90d`: Average `rating` for the product in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`. (Use `COALESCE(AVG(r.rating), 0.0)` for NULLs).
-        *   `num_reviews_prev_90d`: Count of reviews for the product in the 90 days ending at `GLOBAL_PREDICTION_CUTOFF_DATE`. (Use `COALESCE(COUNT(r.review_id), 0)`).
-        *   `days_since_last_review_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `review_date` for this `product_id` *before or on* the cutoff. Return 9999 if no reviews before cutoff.
-        *   `total_reviews_since_launch`: Total count of reviews for the product from `launch_date` up to `GLOBAL_PREDICTION_CUTOFF_DATE`.
-        *   Include `GLOBAL_PREDICTION_CUTOFF_DATE` as a column for consistency.
-    *   **Ensures** all products are included (using `LEFT JOIN`), showing 0 for counts/sums and 0.0 for averages if no activity in the window. Handle `NULL`s appropriately.
+2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `pages_df`, and `sessions_df` into tables named `users`, `pages`, and `sessions` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `start_datetime` in your generated `sessions_df`.
+    *   Write a single SQL query that performs the following for *each session starting AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+        *   Includes static attributes for the *current* session, user, and landing page: `session_id`, `start_datetime`, `session_duration_seconds` (for target creation), `had_conversion` (for target creation), `user_id`, `signup_date`, `device_type`, `browser`, `page_name`, `page_type`.
+        *   Aggregates historical features for the *respective `user_id` in the 30 days preceding or on `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+            *   `avg_session_duration_prev_30d`: Average `session_duration_seconds` for the user.
+            *   `num_sessions_prev_30d`: Count of sessions for the user.
+            *   `conversion_rate_prev_30d`: Average of `had_conversion` (as 0/1) for the user.
+            *   `days_since_last_session_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `start_datetime` for this `user_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior sessions.
+    *   **Ensures** all sessions *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity). Use `julianday()` for date comparisons.
     *   The query should return all mentioned fields.
-    *   **Hint**: Use CTEs for pre-calculating product-level historical aggregates up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Use `julianday()` for date comparisons.
 
-3.  **Pandas Feature Engineering & Multi-class Target Creation**: Fetch the SQL query results into a pandas DataFrame (`product_features_df`).
-    *   Convert `launch_date` and `GLOBAL_PREDICTION_CUTOFF_DATE` to datetime objects.
-    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., averages, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_review_at_cutoff` with 9999.
-    *   Calculate `product_age_at_cutoff_days`: Number of days between `launch_date` and `GLOBAL_PREDICTION_CUTOFF_DATE`.
-    *   **Create the Multi-class Target `next_30d_rating_category`**: For *each product*, calculate the average `rating` of *all reviews* from the original `reviews_df` that occur *after* `GLOBAL_PREDICTION_CUTOFF_DATE` and *on or before* `GLOBAL_PREDICTION_CUTOFF_DATE + pd.Timedelta(days=30)`. Map this average rating into categories:
-        *   'Low': average_rating <= 33rd percentile of *all* such next-30-day average ratings.
-        *   'Medium': average_rating > 33rd percentile and <= 66th percentile.
-        *   'High': average_rating > 66th percentile.
-        *   If a product has no reviews in this 30-day future window, exclude it from the dataset for training/testing. Merge this target with `product_features_df`.
-    *   Define features `X` (numerical: `price`, `avg_rating_prev_90d`, `num_reviews_prev_90d`, `days_since_last_review_at_cutoff`, `total_reviews_since_launch`, `product_age_at_cutoff_days`; categorical: `category`) and target `y` (`next_30d_rating_category`).
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`session_features_df`).
+    *   Convert `signup_date` and `start_datetime` to datetime objects.
+    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., averages, sums, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_session_at_cutoff` with 9999.
+    *   Calculate `user_tenure_at_session_start_days`: Number of days between `signup_date` and `start_datetime` for the *current* session.
+    *   **Create the Binary Target `is_bounce`**: For *each session*, assign 1 if `session_duration_seconds` is less than or equal to the 20th percentile of all `session_duration_seconds` in the dataset AND `had_conversion` is False. Assign 0 otherwise. After target creation, drop the `session_duration_seconds` and `had_conversion` columns from `session_features_df`, as they are used for target definition and would lead to target leakage if included in features `X`.
+    *   Define features `X` (numerical: `avg_session_duration_prev_30d`, `num_sessions_prev_30d`, `conversion_rate_prev_30d`, `days_since_last_session_at_cutoff`, `user_tenure_at_session_start_days`; categorical: `device_type`, `browser`, `page_name`, `page_type`) and target `y` (`is_bounce`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `next_30d_rating_category`:
-    *   A violin plot (or box plot) showing the distribution of `price` for each `next_30d_rating_category`. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `next_30d_rating_category` across different `category` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_bounce`:
+    *   A violin plot (or box plot) showing the distribution of `user_tenure_at_session_start_days` for 'Not Bounce' (0) vs. 'Bounce' (1) sessions. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `is_bounce` (0 or 1) across different `device_type` values. Ensure appropriate labels and titles.
 
-5.  **ML Pipeline & Evaluation (Multi-class Classification)**:
+5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
         *   For numerical features: Apply `sklearn.preprocessing.SimpleImputer(strategy='mean')` followed by `sklearn.preprocessing.StandardScaler`.
         *   For categorical features: Apply `sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore')`.
-    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`).
-    *   Train the pipeline on `X_train`, `y_train`. Predict the `next_30d_rating_category` on the test set (`X_test`).
-    *   Calculate and print a `sklearn.metrics.classification_report` for the test set predictions.
+    *   The final estimator in the pipeline should be `sklearn.ensemble.HistGradientBoostingClassifier` (set `random_state=42`, and consider `class_weight='balanced'` due to potential target imbalance).
+    *   Train the pipeline on `X_train`, `y_train`. Predict probabilities for the positive class (class 1) on the test set (`X_test`).
+    *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
+
+## Focus
+Time-series feature engineering, SQL aggregations, binary classification, target leakage handling, data visualization, ML pipeline construction.
+
+## Dataset
+Synthetic data for website users, pages, and their historical session activities.
+
+## Hint
+Pay close attention to defining the 'bounce' target. Ensure `session_duration_seconds` and `had_conversion` are used *only* for target creation and are explicitly removed from the feature set `X` to prevent target leakage. Use CTEs in SQL for clarity and efficiency when calculating historical aggregates.
