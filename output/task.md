@@ -1,37 +1,38 @@
-# AI Daily Lab — 2026-06-22
+# AI Daily Lab — 2026-06-24
 
 ## Task
-Develop a machine learning pipeline to predict if a website user session will be a **bounce** (binary classification), based on user profile, session details (excluding bounce-defining metrics), and historical user activity up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a piece of industrial equipment will **fail** within the next 30 days (binary classification), based on its static attributes, real-time sensor readings, and historical maintenance records up to a specific cutoff date.
 
-1.  **Synthetic Data Generation (Pandas/Numpy)**: Create three pandas DataFrames:
-    *   `users_df`: With 1000-1500 rows. Columns: `user_id` (unique integers), `signup_date` (random dates over the last 3-5 years), `device_type` (e.g., 'Mobile', 'Desktop', 'Tablet'), `browser` (e.g., 'Chrome', 'Firefox', 'Safari').
-    *   `pages_df`: With 50-100 rows. Columns: `page_id` (unique integers), `page_name` (unique strings, e.g., 'Homepage', 'ProductX', 'CategoryY', 'ContactUs'), `page_type` (e.g., 'Landing', 'Product', 'Informational').
-    *   `sessions_df`: With 20000-30000 rows. Columns: `session_id` (unique integers), `user_id` (randomly sampled from `users_df` IDs), `start_datetime` (random datetimes occurring *after* their respective `signup_date` and up to `pd.Timestamp.now()`), `landing_page_id` (randomly sampled from `pages_df` IDs), `session_duration_seconds` (random floats 1.0-1200.0), `had_conversion` (binary: 1 for ~10-15% of sessions, 0 otherwise).
-    *   **Simulate realistic patterns**: Ensure `start_datetime` is always after `signup_date`. Longer `session_duration_seconds` should correlate with `had_conversion=1`. `device_type` and `browser` should influence session behavior. Some `landing_page_id`s might be stickier or more prone to bounces. Simulate a general trend of users becoming more engaged over time. Sort `sessions_df` by `user_id` then `start_datetime`.
+1.  **Generate Synthetic Data (Pandas/Numpy)**: Create three pandas DataFrames:
+    *   `machines_df`: With 1000-1500 rows. Columns: `machine_id` (unique integers), `installation_date` (random dates over the last 5 years), `machine_type` (e.g., 'TypeA', 'TypeB', 'TypeC'), `location` (e.g., 'PlantX', 'PlantY'), `_actual_failure_date` (for ~10-15% of machines, a random date *after* `installation_date` and within the general data range; `pd.NaT` for non-failed machines).
+    *   `sensor_readings_df`: With 50000-70000 rows. Columns: `reading_id` (unique integers), `machine_id` (randomly sampled from `machines_df` IDs), `reading_datetime` (random datetimes, *after* respective `installation_date` for the `machine_id`, and *before* `_actual_failure_date` if applicable, up to `pd.Timestamp.now()`), `temperature_celsius` (random floats 20.0-100.0), `vibration_hz` (random floats 10.0-100.0), `pressure_psi` (random floats 50.0-500.0).
+    *   `maintenance_df`: With 5000-8000 rows. Columns: `maintenance_id` (unique integers), `machine_id` (randomly sampled from `machines_df` IDs), `maintenance_date` (random dates, *after* respective `installation_date` for the `machine_id`, and *before* `_actual_failure_date` if applicable), `maintenance_type` (e.g., 'Routine', 'Repair', 'Inspection').
+    *   **Simulate realistic patterns**: Ensure `reading_datetime` and `maintenance_date` are always after `installation_date` and before `_actual_failure_date` for failed machines. For machines with an `_actual_failure_date`, `temperature_celsius` and `vibration_hz` should show a noticeable increasing trend in the 30-60 days leading up to their `_actual_failure_date`. `machine_type` and `location` should influence baseline sensor readings and failure rates. `maintenance_type='Repair'` events should slightly reduce sensor values temporarily after the event for the respective machine. Sort `sensor_readings_df` and `maintenance_df` by `machine_id` then date.
 
-2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `users_df`, `pages_df`, and `sessions_df` into tables named `users`, `pages`, and `sessions` respectively.
-    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 7 days prior to the latest `start_datetime` in your generated `sessions_df`.
-    *   Write a single SQL query that performs the following for *each session starting AFTER `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-        *   Includes static attributes for the *current* session, user, and landing page: `session_id`, `start_datetime`, `session_duration_seconds` (for target creation), `had_conversion` (for target creation), `user_id`, `signup_date`, `device_type`, `browser`, `page_name`, `page_type`.
-        *   Aggregates historical features for the *respective `user_id` in the 30 days preceding or on `GLOBAL_PREDICTION_CUTOFF_DATE`*:
-            *   `avg_session_duration_prev_30d`: Average `session_duration_seconds` for the user.
-            *   `num_sessions_prev_30d`: Count of sessions for the user.
-            *   `conversion_rate_prev_30d`: Average of `had_conversion` (as 0/1) for the user.
-            *   `days_since_last_session_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `start_datetime` for this `user_id` *before or on* the cutoff. Return a large number (e.g., 9999) if no prior sessions.
-    *   **Ensures** all sessions *after* the cutoff are included. Handle `NULL`s for historical aggregates (e.g., 0.0 for averages, 0 for counts if no prior activity). Use `julianday()` for date comparisons.
+2.  **Load into SQLite & SQL Feature Engineering (Time-Windowed Aggregations)**: Create an in-memory SQLite database using `sqlite3`. Load `machines_df`, `sensor_readings_df`, and `maintenance_df` into tables named `machines`, `sensor_readings`, and `maintenance` respectively.
+    *   Define `GLOBAL_PREDICTION_CUTOFF_DATE` as 30 days prior to the latest `reading_datetime` in your generated `sensor_readings_df`.
+    *   Write a single SQL query that performs the following for *each machine active up to `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+        *   Includes static attributes: `machine_id`, `installation_date`, `machine_type`, `location`, and the target-relevant `_actual_failure_date` from `machines` table.
+        *   Aggregates historical features for the *respective `machine_id` in the 30 days preceding or on `GLOBAL_PREDICTION_CUTOFF_DATE`*:
+            *   `avg_temperature_prev_30d`, `max_temperature_prev_30d` (from `temperature_celsius`).
+            *   `avg_vibration_prev_30d`, `max_vibration_prev_30d` (from `vibration_hz`).
+            *   `avg_pressure_prev_30d` (from `pressure_psi`).
+            *   `num_maintenance_prev_30d`: Count of maintenance events.
+            *   `days_since_last_maintenance_at_cutoff`: Number of days between `GLOBAL_PREDICTION_CUTOFF_DATE` and the most recent `maintenance_date` for this `machine_id` *before or on* the cutoff. Return 9999 if no prior maintenance.
+    *   **Ensures** all machines are included (using `LEFT JOIN`), showing 0 for counts and 0.0 for averages if no activity in the window. Handle `NULL`s appropriately.
     *   The query should return all mentioned fields.
 
-3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`session_features_df`).
-    *   Convert `signup_date` and `start_datetime` to datetime objects.
-    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., averages, sums, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_session_at_cutoff` with 9999.
-    *   Calculate `user_tenure_at_session_start_days`: Number of days between `signup_date` and `start_datetime` for the *current* session.
-    *   **Create the Binary Target `is_bounce`**: For *each session*, assign 1 if `session_duration_seconds` is less than or equal to the 20th percentile of all `session_duration_seconds` in the dataset AND `had_conversion` is False. Assign 0 otherwise. After target creation, drop the `session_duration_seconds` and `had_conversion` columns from `session_features_df`, as they are used for target definition and would lead to target leakage if included in features `X`.
-    *   Define features `X` (numerical: `avg_session_duration_prev_30d`, `num_sessions_prev_30d`, `conversion_rate_prev_30d`, `days_since_last_session_at_cutoff`, `user_tenure_at_session_start_days`; categorical: `device_type`, `browser`, `page_name`, `page_type`) and target `y` (`is_bounce`).
+3.  **Pandas Feature Engineering & Binary Target Creation**: Fetch the SQL query results into a pandas DataFrame (`machine_features_df`).
+    *   Convert `installation_date` and `_actual_failure_date` to datetime objects.
+    *   Handle `NaN` values: Fill numerical historical aggregated features (e.g., averages, max, counts) with 0.0 or 0 as appropriate. Fill `days_since_last_maintenance_at_cutoff` with 9999.
+    *   Calculate `machine_age_at_cutoff_days`: Number of days between `installation_date` and `GLOBAL_PREDICTION_CUTOFF_DATE`.
+    *   **Create the Binary Target `will_fail_next_30d`**: For *each machine*, assign 1 if its `_actual_failure_date` falls *after* `GLOBAL_PREDICTION_CUTOFF_DATE` and *on or before* `GLOBAL_PREDICTION_CUTOFF_DATE + pd.Timedelta(days=30)`. Assign 0 otherwise.
+    *   Define features `X` (numerical: `avg_temperature_prev_30d`, `max_temperature_prev_30d`, `avg_vibration_prev_30d`, `max_vibration_prev_30d`, `avg_pressure_prev_30d`, `num_maintenance_prev_30d`, `days_since_last_maintenance_at_cutoff`, `machine_age_at_cutoff_days`; categorical: `machine_type`, `location`) and target `y` (`will_fail_next_30d`).
     *   Split into training and testing sets (e.g., 70/30 split) using `sklearn.model_selection.train_test_split` (set `random_state=42`, `stratify` on `y` for class balance).
 
-4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `is_bounce`:
-    *   A violin plot (or box plot) showing the distribution of `user_tenure_at_session_start_days` for 'Not Bounce' (0) vs. 'Bounce' (1) sessions. Ensure appropriate labels and titles.
-    *   A stacked bar chart showing the proportion of `is_bounce` (0 or 1) across different `device_type` values. Ensure appropriate labels and titles.
+4.  **Data Visualization (Matplotlib/Seaborn)**: Create two separate plots to visually inspect relationships with `will_fail_next_30d`:
+    *   A violin plot (or box plot) showing the distribution of `machine_age_at_cutoff_days` for 'Not Fail' (0) vs. 'Will Fail' (1) machines. Ensure appropriate labels and titles.
+    *   A stacked bar chart showing the proportion of `will_fail_next_30d` (0 or 1) across different `machine_type` values. Ensure appropriate labels and titles.
 
 5.  **ML Pipeline & Evaluation (Binary Classification)**:
     *   Create an `sklearn.pipeline.Pipeline` with a `sklearn.compose.ColumnTransformer` for preprocessing:
@@ -42,10 +43,10 @@ Develop a machine learning pipeline to predict if a website user session will be
     *   Calculate and print the `sklearn.metrics.roc_auc_score` and a `sklearn.metrics.classification_report` for the test set predictions.
 
 ## Focus
-Time-series feature engineering, SQL aggregations, binary classification, target leakage handling, data visualization, ML pipeline construction.
+Time-series feature engineering from sensor and event data, SQL for historical aggregates, binary classification with imbalanced data.
 
 ## Dataset
-Synthetic data for website users, pages, and their historical session activities.
+Synthetic industrial equipment sensor readings and maintenance logs.
 
 ## Hint
-Pay close attention to defining the 'bounce' target. Ensure `session_duration_seconds` and `had_conversion` are used *only* for target creation and are explicitly removed from the feature set `X` to prevent target leakage. Use CTEs in SQL for clarity and efficiency when calculating historical aggregates.
+For SQL feature engineering, create separate CTEs for historical sensor aggregates and maintenance event counts for each machine up to `GLOBAL_PREDICTION_CUTOFF_DATE`. Then, `LEFT JOIN` these CTEs with the main `machines` table to ensure all machines are included. Use `julianday()` for date arithmetic, `MAX(CASE WHEN ... END)` for `days_since_last_maintenance_at_cutoff` to find the latest date, and `COALESCE` for handling `NULL`s in aggregated features. When calculating `days_since_last_maintenance_at_cutoff`, if a machine has no prior maintenance, return 9999 (or a similar large number). For the binary target, ensure `GLOBAL_PREDICTION_CUTOFF_DATE` is consistently defined across SQL and Pandas. Use `class_weight='balanced'` in the classifier for the likely imbalanced failure prediction target.
