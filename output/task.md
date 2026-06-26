@@ -1,13 +1,13 @@
-# AI Daily Lab — 2026-06-25
+# AI Daily Lab — 2026-06-26
 
 ## Task
-Develop a machine learning pipeline to predict if a user will **rate a movie highly** (binary classification: rating_score >= 4) for a specific user-movie interaction, based on user preferences, movie attributes, and historical rating patterns up to a specific cutoff date.
+Develop a machine learning pipeline to predict if a sales lead will **convert into a customer** within the next 30 days (binary classification), based on lead demographics, company attributes, and historical interaction patterns up to a specific cutoff date.
 
 ## Focus
-Predictive modeling for user-item interactions, involving time-series feature engineering with SQL, and binary classification.
+Time-series feature engineering (SQL), binary classification, data imputation, scaling, one-hot encoding, model evaluation with imbalanced data.
 
 ## Dataset
-Simulated movie ratings, user profiles, and movie attributes.
+Synthetic data for sales leads and their interactions.
 
 ## Hint
-When generating synthetic data for `ratings_df`, ensure `rating_datetime` is after both `users_df.signup_date` and `movies_df.release_date`. For SQL time-windowed aggregates, compute user-specific and movie-specific historical averages and counts *before* a `GLOBAL_PREDICTION_CUTOFF_DATE`, then join these aggregates to the future ratings that occurred *after* the cutoff. Use `julianday()` for date arithmetic in SQLite. For the target, defining 'high rating' as >=4 and handling class imbalance with `class_weight='balanced'` in your model will be key.
+When creating synthetic `_actual_conversion_date`, ensure it's `pd.NaT` for non-converters. For SQL aggregation, use `julianday()` for date comparisons and `CASE WHEN` for conditional counts (e.g., `num_demo_requests_prev_60d`). Remember to `LEFT JOIN` historical aggregates to ensure all leads are present. For the binary target, `GLOBAL_PREDICTION_CUTOFF_DATE` and `_actual_conversion_date` will determine `will_convert_next_30d`.
